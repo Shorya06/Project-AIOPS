@@ -1,0 +1,15 @@
+# Target directory containing compiled files
+**/target/
+
+# IDE configurations
+.idea/
+*.iml
+.vscode/
+
+# Local database data (Docker volumes / temporary files)
+pg_data/
+postgres_data/
+
+# OS specific files
+.DS_Store
+Thumbs.db
