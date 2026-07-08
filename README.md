@@ -39,3 +39,22 @@ This is a 5-microservice AIOps Platform built as a final-year CSE capstone proje
 * Runs the business application and the database logger side-by-side.
 * Maps database tables automatically in PostgreSQL via Hibernate's `ddl-auto: update` feature.
 * Prepares the system for the Kubernetes observer to watch the container states.
+
+### Day 3: Stage 2 - Debugging, Stabilization & Compile Fixes (Completed)
+**Goal**: Resolve compilation errors, fix Lombok code generation, implement placeholders, and achieve a successful Maven build across all modules.
+
+**What was done**:
+1. **Entity & Enum Completion**: Added properties, package declarations, and JPA mappings to the `Transaction` entity and defined transaction status constants in `TransactionStatus`.
+2. **DTO & Mapper Implementation**: Finished `TransactionResponseDTO` properties and implemented static converter functions inside `TransactionMapper` to bridge entities and DTOs.
+3. **Exception Architecture Setup**: Created a custom `TransactionNotFoundException` extending `RuntimeException` and mapped response states. Built a `GlobalExceptionHandler` controller advice to format API exception JSON bodies.
+4. **Lombok Maven Configuration**: Added the Lombok annotation processor explicitly to the `maven-compiler-plugin` configuration in the parent `pom.xml` to resolve compile-time symbol errors.
+5. **Full Clean Build Verification**: Ran `mvn clean install` to execute unit tests and compile all 6 modules successfully into clean runnable jars.
+
+**Why it was done**:
+* To replace blank boilerplate placeholders with functional, compiled code.
+* To ensure compile-time stability across the code base before building the Kubernetes observer engine.
+* To configure Lombok processing correctly under Java 21+ and Spring Boot 3.x, resolving compiler issues with builders, getters, and setters.
+
+**What it does in the project**:
+* Guarantees that all Maven packages build cleanly.
+* Establishes a working data layer for SQL logging, DTO serialization, and REST exception handler mappings.
