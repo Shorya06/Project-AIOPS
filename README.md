@@ -58,3 +58,20 @@ This is a 5-microservice AIOps Platform built as a final-year CSE capstone proje
 **What it does in the project**:
 * Guarantees that all Maven packages build cleanly.
 * Establishes a working data layer for SQL logging, DTO serialization, and REST exception handler mappings.
+
+### Day 4: Stage 2 - Notification Service Implementation & Debugging (Completed)
+**Goal**: Complete the concrete backend logic for the `notification-service`, resolve bean instantiation crashes, and verify clean startup.
+
+**What was done**:
+1. **Concrete Service Implementation**: Wrote the complete `NotificationServiceImpl` implementing CRUD methods (`saveNotification`, `getAllNotifications`, `getNotificationById`, `updateNotification`, `deleteNotification`) and connecting to `NotificationRepository`.
+2. **Spring Context Resolution**: Annotated the service implementation with `@Service` and verified that it implements `NotificationService` to resolve the autowiring failure in `NotificationController`.
+3. **Application Boot Verification**: Verified that the service starts Tomcat successfully on port `8083` and logs a successful JPA Repository interface detection.
+4. **Database Mapping**: Verified Hibernate automatically sets up the `notifications` schema inside PostgreSQL.
+
+**Why it was done**:
+* To resolve a critical context initialization failure (`UnsatisfiedDependencyException`) caused by missing stereotype annotations.
+* To prepare the system's audit logging infrastructure, enabling other services to submit notification alerts and healing state logs to PostgreSQL.
+
+**What it does in the project**:
+* Exposes complete CRUD endpoints under `/api/v1/notifications` for tracking system warnings and emails.
+* Connects the notification persistence layer so that transaction errors can trigger logged warnings.
