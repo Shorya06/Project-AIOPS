@@ -4,3 +4,24 @@ server:
 spring:
   application:
     name: healing-service
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/aiops_db
+    username: aiops_user
+    password: aiops_password
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus

@@ -75,3 +75,20 @@ This is a 5-microservice AIOps Platform built as a final-year CSE capstone proje
 **What it does in the project**:
 * Exposes complete CRUD endpoints under `/api/v1/notifications` for tracking system warnings and emails.
 * Connects the notification persistence layer so that transaction errors can trigger logged warnings.
+
+### Day 5: Stage 3 - Healing Service Foundation & Configuration (Completed)
+**Goal**: Build the core JPA mapping structures, DTOs, mappers, custom exceptions, and REST endpoints for the `healing-service`, and configure database integration.
+
+**What was done**:
+1. **Foundation Code Scaffolding**: Generated the complete class suite for `healing-service` comprising the `HealingOperation` entity (with `@PrePersist` hooks), `HealingAction` and `HealingStatus` enums, `HealingRepository`, mapper, validation DTOs, custom exception handler, and `HealingController`.
+2. **Build Configurations Fix**: Added the missing `spring-boot-starter-data-jpa` and `postgresql` driver dependencies to the module's `pom.xml`.
+3. **Application Properties Updates**: Wrote the PostgreSQL datasource connectivity settings (url, username, password, driver, and Hibernate properties) inside `application.yaml`.
+4. **Build & Test Validation**: Executed `mvn clean install` to run tests and verify context loading and JPA mapping compatibility.
+
+**Why it was done**:
+* To establish the core database tracking tables (`healing_operations`) where the platform will log every restart or resource scale action taken by the AI.
+* To resolve compiler dependency issues and connection pool driver failures that blocked module compilation and tests.
+
+**What it does in the project**:
+* Exposes REST CRUD endpoints under `/api/v1/healing` to query or log auto-remediations.
+* Maps database tables automatically in PostgreSQL via Hibernate's schema update.
