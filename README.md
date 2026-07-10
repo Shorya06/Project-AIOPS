@@ -92,3 +92,26 @@ This is a 5-microservice AIOps Platform built as a final-year CSE capstone proje
 **What it does in the project**:
 * Exposes REST CRUD endpoints under `/api/v1/healing` to query or log auto-remediations.
 * Maps database tables automatically in PostgreSQL via Hibernate's schema update.
+
+### Day 6: Stage 3 & 4 - Distributed Event Orchestration (Completed)
+**Goal**: Integrate the observer service, configure OpenFeign client communication boundaries, and orchestrate the automated failure audit workflow.
+
+**What was done**:
+1. **Observer Service Deployment**: Integrated the `k8s-observer-service` (listening on port `8084`) to monitor and report container failures.
+2. **Feign Client Integrations**: Configured type-safe declarative REST clients using OpenFeign:
+   * **Observer → Healing**: `k8s-observer-service` invokes the `healing-service` endpoint.
+   * **Healing → Notification**: `healing-service` invokes the `notification-service` endpoint to notify administrators.
+3. **Automated Event Flow Orchestration**: Enabled the core distributed system flow:
+   * Client triggers `POST /observer/pod-failure`.
+   * `k8s-observer-service` routes details to `healing-service`.
+   * `healing-service` creates a `HealingOperation` record (marked PENDING / SUCCESS) in PostgreSQL.
+   * `healing-service` invokes `notification-service` to log a notification status record in PostgreSQL.
+4. **Project Compilation**: Verified all 6 modules build and pass tests cleanly during the `mvn clean install` cycle.
+
+**Why it was done**:
+* To transform individual services into a cohesive distributed platform, simulating how real-world monitoring observers dispatch incidents to AI diagnostics.
+* To achieve decoupled auditing where database logs, healing runs, and alerts are stored in their respective service schemas.
+
+**What it does in the project**:
+* Connects the API gateway router and all 4 backend microservices into a unified pipeline.
+* Handles asynchronous event processing where container crashes are logged, diagnosed, and reported automatically.
