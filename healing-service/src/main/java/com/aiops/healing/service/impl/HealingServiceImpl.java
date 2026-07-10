@@ -1,31 +1,30 @@
 package com.aiops.healing.service.impl;
 
+import com.aiops.healing.client.NotificationClient;
+import com.aiops.healing.dto.NotificationRequestDTO;
+import com.aiops.healing.dto.RestartPodRequestDTO;
+import com.aiops.healing.entity.HealingAction;
 import com.aiops.healing.entity.HealingOperation;
 import com.aiops.healing.entity.HealingStatus;
 import com.aiops.healing.exception.HealingOperationNotFoundException;
 import com.aiops.healing.repository.HealingRepository;
 import com.aiops.healing.service.HealingService;
 import org.springframework.stereotype.Service;
+
 import java.time.LocalDateTime;
 import java.util.List;
 
-/**
- * ==============================================================
- * HealingServiceImpl
- * ==============================================================
- * 
- * Purpose: Contains the concrete business logic implementation for healing records.
- * 
- * Why it exists: Performs database lookups, throws exceptions when entities
- * are missing, updates properties, and writes records to PostgreSQL.
- */
 @Service
 public class HealingServiceImpl implements HealingService {
 
     private final HealingRepository repository;
+    private final NotificationClient notificationClient;
 
-    public HealingServiceImpl(HealingRepository repository) {
+    public HealingServiceImpl(
+            HealingRepository repository,
+            NotificationClient notificationClient) {
         this.repository = repository;
+        this.notificationClient = notificationClient;
     }
 
     @Override
@@ -47,6 +46,7 @@ public class HealingServiceImpl implements HealingService {
 
     @Override
     public HealingOperation updateOperation(Long id, HealingOperation operation) {
+
         HealingOperation existing = repository.findById(id)
                 .orElseThrow(() -> new HealingOperationNotFoundException(
                         "Healing operation not found with ID: " + id));
@@ -55,11 +55,13 @@ public class HealingServiceImpl implements HealingService {
         existing.setNamespace(operation.getNamespace());
         existing.setAction(operation.getAction());
         existing.setReason(operation.getReason());
-        
-        // If status transitions to success or failure, mark the completion time
-        if (operation.getStatus() != null && operation.getStatus() != existing.getStatus()) {
+
+        if (operation.getStatus() != null) {
             existing.setStatus(operation.getStatus());
-            if (operation.getStatus() == HealingStatus.SUCCESS || operation.getStatus() == HealingStatus.FAILED) {
+
+            if (operation.getStatus() == HealingStatus.SUCCESS ||
+                    operation.getStatus() == HealingStatus.FAILED) {
+
                 existing.setCompletedAt(LocalDateTime.now());
             }
         }
@@ -69,9 +71,53 @@ public class HealingServiceImpl implements HealingService {
 
     @Override
     public void deleteOperation(Long id) {
+
         HealingOperation existing = repository.findById(id)
                 .orElseThrow(() -> new HealingOperationNotFoundException(
                         "Healing operation not found with ID: " + id));
+
         repository.delete(existing);
+    }
+
+    /**
+     * Business Method
+     *
+     * Simulates restarting a pod.
+     * (Real Kubernetes restart will be added later.)
+     */
+    @Override
+    public HealingOperation performHealing(RestartPodRequestDTO request) {
+
+        // Create healing record
+        HealingOperation operation = new HealingOperation();
+
+        operation.setPodName(request.getPodName());
+        operation.setNamespace(request.getNamespace());
+        operation.setReason(request.getReason());
+
+        operation.setAction(HealingAction.RESTART);
+        operation.setStatus(HealingStatus.SUCCESS);
+
+        operation.setStartedAt(LocalDateTime.now());
+        operation.setCompletedAt(LocalDateTime.now());
+
+        // Save healing operation
+        HealingOperation savedOperation = repository.save(operation);
+
+        // Create notification request
+        NotificationRequestDTO notification = new NotificationRequestDTO();
+
+        notification.setRecipient("admin@aiops.com");
+        notification.setSubject("Pod Restarted");
+
+        notification.setMessage(
+                "Pod '" +
+                        request.getPodName() +
+                        "' was restarted successfully.");
+
+        // Call Notification Service
+        notificationClient.sendNotification(notification);
+
+        return savedOperation;
     }
 }
