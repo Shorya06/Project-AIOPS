@@ -4,3 +4,9 @@ server:
 spring:
   application:
     name: k8s-observer-service
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
