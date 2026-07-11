@@ -1,0 +1,28 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: healing-service
+
+  datasource:
+    url: jdbc:postgresql://postgres:5432/aiops_db
+    username: aiops_user
+    password: aiops_password
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    open-in-view: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+
+notification:
+  service:
+    url: http://notification-service:8083

@@ -1,0 +1,56 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  # ==========================================================
+  # Prometheus
+  # ==========================================================
+  - job_name: "prometheus"
+    static_configs:
+      - targets:
+          - "prometheus:9090"
+
+  # ==========================================================
+  # API Gateway
+  # ==========================================================
+  - job_name: "gateway-service"
+    metrics_path: "/actuator/prometheus"
+    static_configs:
+      - targets:
+          - "gateway-service:8080"
+
+  # ==========================================================
+  # Transaction Service
+  # ==========================================================
+  - job_name: "transaction-service"
+    metrics_path: "/actuator/prometheus"
+    static_configs:
+      - targets:
+          - "transaction-service:8081"
+
+  # ==========================================================
+  # Healing Service
+  # ==========================================================
+  - job_name: "healing-service"
+    metrics_path: "/actuator/prometheus"
+    static_configs:
+      - targets:
+          - "healing-service:8082"
+
+  # ==========================================================
+  # Notification Service
+  # ==========================================================
+  - job_name: "notification-service"
+    metrics_path: "/actuator/prometheus"
+    static_configs:
+      - targets:
+          - "notification-service:8083"
+
+  # ==========================================================
+  # Observer Service
+  # ==========================================================
+  - job_name: "observer-service"
+    metrics_path: "/actuator/prometheus"
+    static_configs:
+      - targets:
+          - "k8s-observer-service:8084"

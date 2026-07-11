@@ -1,35 +1,176 @@
-version: '3.8'
+version: "3.9"
 
 services:
+
+  # ==========================================================
+  # PostgreSQL
+  # ==========================================================
   postgres:
     image: postgres:15-alpine
     container_name: aiops-postgres
+
     environment:
       POSTGRES_DB: aiops_db
       POSTGRES_USER: aiops_user
       POSTGRES_PASSWORD: aiops_password
+
     ports:
       - "5432:5432"
+
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+    networks:
+      - aiops-network
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aiops_user -d aiops_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==========================================================
+  # Transaction Service
+  # ==========================================================
+  transaction-service:
+    build:
+      context: ./transaction-service
+
+    container_name: transaction-service
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    ports:
+      - "8081:8081"
+
+    networks:
+      - aiops-network
+
+  # ==========================================================
+  # Notification Service
+  # ==========================================================
+  notification-service:
+    build:
+      context: ./notification-service
+
+    container_name: notification-service
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    ports:
+      - "8083:8083"
+
+    networks:
+      - aiops-network
+
+  # ==========================================================
+  # Healing Service
+  # ==========================================================
+  healing-service:
+    build:
+      context: ./healing-service
+
+    container_name: healing-service
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+      notification-service:
+        condition: service_started
+
+    ports:
+      - "8082:8082"
+
+    networks:
+      - aiops-network
+
+  # ==========================================================
+  # Observer Service
+  # ==========================================================
+  k8s-observer-service:
+    build:
+      context: ./k8s-observer-service
+
+    container_name: k8s-observer-service
+
+    depends_on:
+      healing-service:
+        condition: service_started
+
+    ports:
+      - "8084:8084"
+
+    networks:
+      - aiops-network
+
+  # ==========================================================
+  # API Gateway
+  # ==========================================================
+  gateway-service:
+    build:
+      context: ./gateway-service
+
+    container_name: gateway-service
+
+    depends_on:
+      - transaction-service
+      - healing-service
+      - notification-service
+      - k8s-observer-service
+
+    ports:
+      - "8080:8080"
+
+    networks:
+      - aiops-network
+
+  # ==========================================================
+  # Prometheus
+  # ==========================================================
   prometheus:
     image: prom/prometheus:latest
+
     container_name: aiops-prometheus
+
     volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+
     ports:
       - "9090:9090"
 
+    depends_on:
+      - gateway-service
+
+    networks:
+      - aiops-network
+
+  # ==========================================================
+  # Grafana
+  # ==========================================================
   grafana:
     image: grafana/grafana:latest
+
     container_name: aiops-grafana
+
     ports:
       - "3000:3000"
+
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+
     depends_on:
       - prometheus
+
+    networks:
+      - aiops-network
+
+networks:
+  aiops-network:
 
 volumes:
   postgres_data:

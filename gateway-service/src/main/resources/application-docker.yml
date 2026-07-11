@@ -1,0 +1,35 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: gateway-service
+
+  cloud:
+    gateway:
+      routes:
+        - id: transaction-service
+          uri: http://transaction-service:8081
+          predicates:
+            - Path=/api/v1/transactions/**
+
+        - id: healing-service
+          uri: http://healing-service:8082
+          predicates:
+            - Path=/api/v1/healing/**
+
+        - id: notification-service
+          uri: http://notification-service:8083
+          predicates:
+            - Path=/api/v1/notifications/**
+
+        - id: observer-service
+          uri: http://k8s-observer-service:8084
+          predicates:
+            - Path=/api/v1/observer/**
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus

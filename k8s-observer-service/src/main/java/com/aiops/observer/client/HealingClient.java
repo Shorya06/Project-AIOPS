@@ -6,27 +6,22 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 
 /**
- * ==============================================================
+ * ==========================================================
  * HealingClient
- * ==============================================================
+ * ==========================================================
  *
  * PURPOSE
  * -------
- * Allows the Observer Service to communicate with the Healing Service.
+ * Allows the Observer Service to communicate with the
+ * Healing Service.
  *
- * Instead of manually making HTTP requests,
- * Spring Cloud OpenFeign generates the implementation automatically.
+ * The URL is configurable so the same code works in
+ * Local, Docker and Kubernetes.
  */
-@FeignClient(
-        name = "healing-service",
-        url = "http://localhost:8082"
-)
+@FeignClient(name = "healing-service", url = "${healing.service.url}")
 public interface HealingClient {
 
-    /**
-     * Calls:
-     * POST http://localhost:8082/api/v1/healing/restart
-     */
     @PostMapping("/api/v1/healing/restart")
     void restartPod(@RequestBody PodFailureRequestDTO request);
+
 }

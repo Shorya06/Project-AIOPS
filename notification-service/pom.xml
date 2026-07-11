@@ -21,6 +21,12 @@
 
     <dependencies>
 
+    <!-- Prometheus Metrics -->
+<dependency>
+    <groupId>io.micrometer</groupId>
+    <artifactId>micrometer-registry-prometheus</artifactId>
+</dependency>
+
         <!-- REST APIs -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

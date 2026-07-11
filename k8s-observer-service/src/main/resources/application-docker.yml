@@ -13,4 +13,4 @@ management:
 
 healing:
   service:
-    url: http://localhost:8082
+    url: http://healing-service:8082
