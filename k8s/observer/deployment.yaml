@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k8s-observer-service
+  namespace: aiops
+  labels:
+    app: k8s-observer-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: k8s-observer-service
+  template:
+    metadata:
+      labels:
+        app: k8s-observer-service
+    spec:
+      containers:
+        - name: k8s-observer-service
+          image: projectaiops-k8s-observer-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8084
+              name: http
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: "docker"
+            - name: HEALING_SERVICE_URL
+              value: "http://healing-service:8082"

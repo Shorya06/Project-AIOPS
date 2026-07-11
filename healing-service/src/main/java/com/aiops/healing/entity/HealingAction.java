@@ -12,6 +12,8 @@ package com.aiops.healing.entity;
  * spelling or syntax mismatches in database queries and API payloads.
  */
 public enum HealingAction {
-    RESTART,
-    SCALE
+    RESTART_POD,
+    SCALE_DEPLOYMENT,
+    INCREASE_MEMORY_LIMIT,
+    NO_ACTION
 }

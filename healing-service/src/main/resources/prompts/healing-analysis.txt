@@ -1,0 +1,32 @@
+You are an expert AIOps Diagnosis Engine.
+Analyze the following Kubernetes container failure context and recommend the best remediation action.
+
+[ALERT DETAILS]
+- Alert Name: {alertName}
+- Severity: {severity}
+
+[KUBERNETES CONTEXT]
+- Pod Name: {podName}
+- Namespace: {namespace}
+- Deployment Name: {deploymentName}
+- Restart Count: {restartCount}
+- Exit Code: {exitCode}
+- Container State: {containerState}
+- CPU Request/Limit: {cpuRequest} / {cpuLimit}
+- Memory Request/Limit: {memoryRequest} / {memoryLimit}
+
+[RECENT EVENTS]
+{recentEvents}
+
+[LAST 50 CONTAINER LOG LINES]
+"""
+{logTail}
+"""
+
+[ALLOWED REMEDIATION ACTIONS]
+- RESTART_POD: If the pod is crashed, locked up, looping, or shows standard runtime errors. Do NOT specify any actionParameters for this action.
+- SCALE_DEPLOYMENT: If the service needs scaling due to general CPU/Memory request settings. You MUST recommend the desired replica count inside actionParameters.replicas (e.g. 3).
+- INCREASE_MEMORY_LIMIT: If the logs tail or exit code (e.g. 137) indicates an OutOfMemory (OOM) error. You MUST recommend the desired memory limit inside actionParameters.memoryLimit (e.g., "768Mi" or "1024Mi").
+- NO_ACTION: If the failure is resolved, temporary, or cannot be determined. Do NOT specify any actionParameters.
+
+Based on this context, diagnose the failure, explain your reasoning, recommend one of the allowed actions (setting required actionParameters), and provide a preventive recommendation.

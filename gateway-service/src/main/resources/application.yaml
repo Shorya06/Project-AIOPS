@@ -33,6 +33,14 @@ spring:
           predicates:
             - Path=/api/v1/notifications/**
 
+        # ===============================
+        # Observer Alert Webhook Route
+        # ===============================
+        - id: observer-alerts-route
+          uri: http://localhost:8084
+          predicates:
+            - Path=/api/v1/alerts/**
+
 management:
   endpoints:
     web:

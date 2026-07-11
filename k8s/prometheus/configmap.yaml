@@ -1,0 +1,51 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: aiops
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets:
+                - "alertmanager:9093"
+
+    scrape_configs:
+      - job_name: "prometheus"
+        static_configs:
+          - targets:
+              - "localhost:9090"
+
+      - job_name: "gateway-service"
+        metrics_path: "/actuator/prometheus"
+        static_configs:
+          - targets:
+              - "gateway-service:8080"
+
+      - job_name: "transaction-service"
+        metrics_path: "/actuator/prometheus"
+        static_configs:
+          - targets:
+              - "transaction-service:8081"
+
+      - job_name: "healing-service"
+        metrics_path: "/actuator/prometheus"
+        static_configs:
+          - targets:
+              - "healing-service:8082"
+
+      - job_name: "notification-service"
+        metrics_path: "/actuator/prometheus"
+        static_configs:
+          - targets:
+              - "notification-service:8083"
+
+      - job_name: "k8s-observer-service"
+        metrics_path: "/actuator/prometheus"
+        static_configs:
+          - targets:
+              - "k8s-observer-service:8084"
