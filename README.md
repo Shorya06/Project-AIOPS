@@ -1,117 +1,186 @@
 # AI-Powered Self-Healing AIOps Platform
 
-This is a 5-microservice AIOps Platform built as a final-year CSE capstone project. The core feature is an AI self-healing module that integrates with the Gemini API to auto-detect and remediate Kubernetes failures (OOMKilled, CrashLoopBackOff) by reading container status events and logs.
-
-## Architectural Documents
-* [Development Roadmap](./aiops_platform_roadmap.md)
-* [Technical Implementation Plan](./implementation_plan.md)
+This is a production-grade **5-microservice AIOps Platform** built as a final-year CSE capstone project. The platform implements a distributed self-healing loop that simulates container monitor warnings (e.g., CPU/Memory resource exhaustion, OOMKilled, CrashLoopBackOff) and automatically triggers self-healing runs, logs operations audits, and dispatches administrative alerts across the cluster.
 
 ---
 
-## Progress Log
+## 🏗️ System Architecture
 
-### Day 1: Stage 1 - Workspace & Local Dev Setup (Completed)
-**Goal**: Set up the parent workspace structure and local development databases/observability tooling.
+### Distributed Microservice Topology
+The platform consists of a centralized API gateway that routes traffic to internal microservices communicating via type-safe declarative REST clients (Spring Cloud OpenFeign):
 
-**What was done**:
-1. **Directory Architecture**: Scaffolded parent directory structure for the 5 microservices (`gateway-service`, `transaction-service`, `k8s-observer-service`, `healing-service`, `notification-service`).
-2. **Parent POM Configured**: Created a root Maven Parent `pom.xml` to manage dependencies (Spring Boot, Spring Cloud, Kubernetes client-java SDK) uniformly across all submodules.
-3. **Local Infrastructure via Docker Compose**: Spun up local PostgreSQL (database), Prometheus (metrics collection), and Grafana (metrics visualization) using Docker.
-4. **Verification**: Checked that PostgreSQL port `5432`, Prometheus port `9090`, and Grafana port `3000` are fully up, mapped to `localhost`, and communicating.
+```text
+                       API Gateway (Port 8080)
+                                │
+        ┌───────────────────────┼───────────────────────┐
+        ▼                       ▼                       ▼
+ Transaction Service      Healing Service      Notification Service
+     (Port 8081)            (Port 8082)            (Port 8083)
+                                ▲
+                                │
+                         OpenFeign Call
+                                ▲
+                                │
+                         Observer Service
+                           (Port 8084)
+```
 
-### Day 2: Stage 2 - Core Microservices & Database Integration (Completed)
-**Goal**: Bootstrap the microservice modules, establish database communication, route APIs, and write fault injection endpoints.
+### End-to-End Orchestrated Event Flow
+When a cluster monitoring agent (represented by the Observer Service) intercepts a container fault, it orchestrates a distributed cascade of self-healing and alert actions:
 
-**What was done**:
-1. **Module Scaffolding**: Built the directory structures, packages, and main application classes for all 5 submodules.
-2. **Gateway Configuration**: Set up Spring Cloud Gateway in `gateway-service` to route traffic to underlying services (`transaction-service` on port 8081, `healing-service` on port 8082, and `notification-service` on port 8083).
-3. **Transaction Backend & Database Integration**: Created JPA entities, repositories, and REST endpoints in `transaction-service` to store transactions in PostgreSQL.
-4. **Fault Injection Hooks**: Built custom endpoints `/api/v1/transactions/fault/oom` (simulates memory leaks) and `/api/v1/transactions/fault/crash` (simulates container crashes) inside `transaction-service` to enable test failures.
-5. **Notification Service Logger**: Set up tables in the database via JPA to store AI healing logs.
-6. **Compilation**: Validated that all modules build cleanly and `mvn clean install` compiles successfully.
+```text
+[POST /api/v1/observer/pod-failure]
+                  │
+                  ▼
+         [Observer Service]
+                  │
+             (OpenFeign)
+                  ▼
+          [Healing Service] ───► [Save Healing Audit Record] ───► [PostgreSQL]
+                  │
+             (OpenFeign)
+                  ▼
+       [Notification Service] ──► [Save Alert Log Record] ───► [PostgreSQL]
+```
 
-**Why it was done**:
-* To create a mock business application (`transaction-service`) that behaves like a real-world production database consumer but contains triggerable faults.
-* To centralize API gateway routing so the client frontend only needs to connect to one port (`8080`).
-* To provide a persistent audit trail (`healing_history`) where the AI Self-Healing engine can store diagnostics for review.
+---
 
-**What it does in the project**:
-* Runs the business application and the database logger side-by-side.
-* Maps database tables automatically in PostgreSQL via Hibernate's `ddl-auto: update` feature.
-* Prepares the system for the Kubernetes observer to watch the container states.
+## ⚡ Core Features
 
-### Day 3: Stage 2 - Debugging, Stabilization & Compile Fixes (Completed)
-**Goal**: Resolve compilation errors, fix Lombok code generation, implement placeholders, and achieve a successful Maven build across all modules.
+1. **Declarative API Routing**: Centralizes all frontend API paths under Spring Cloud Gateway (`8080`), abstracting port mappings of downstream services.
+2. **Kubernetes Failure Observation**: Watcher mock controller (`k8s-observer-service`) capable of capturing pod failure descriptors (`podName`, `namespace`, `reason`) and initiating diagnosis.
+3. **Automated Auto-Healing Runs**: Service rules that receive failure logs and determine action workflows (e.g. `RESTART`, `SCALE`) based on log tails.
+4. **Multi-Service Persistence**: PostgreSQL storage auditing every healing operation state (`PENDING`, `SUCCESS`, `FAILED`) and administrative notification alerts independently.
+5. **Observability Instrumentation**: All services publish system-level metrics via Micrometer and Spring Boot Actuator, fully integrated with Prometheus and Grafana for JVM monitoring.
 
-**What was done**:
-1. **Entity & Enum Completion**: Added properties, package declarations, and JPA mappings to the `Transaction` entity and defined transaction status constants in `TransactionStatus`.
-2. **DTO & Mapper Implementation**: Finished `TransactionResponseDTO` properties and implemented static converter functions inside `TransactionMapper` to bridge entities and DTOs.
-3. **Exception Architecture Setup**: Created a custom `TransactionNotFoundException` extending `RuntimeException` and mapped response states. Built a `GlobalExceptionHandler` controller advice to format API exception JSON bodies.
-4. **Lombok Maven Configuration**: Added the Lombok annotation processor explicitly to the `maven-compiler-plugin` configuration in the parent `pom.xml` to resolve compile-time symbol errors.
-5. **Full Clean Build Verification**: Ran `mvn clean install` to execute unit tests and compile all 6 modules successfully into clean runnable jars.
+---
 
-**Why it was done**:
-* To replace blank boilerplate placeholders with functional, compiled code.
-* To ensure compile-time stability across the code base before building the Kubernetes observer engine.
-* To configure Lombok processing correctly under Java 21+ and Spring Boot 3.x, resolving compiler issues with builders, getters, and setters.
+## 🛠️ Technology Stack
 
-**What it does in the project**:
-* Guarantees that all Maven packages build cleanly.
-* Establishes a working data layer for SQL logging, DTO serialization, and REST exception handler mappings.
+* **Core Framework**: Spring Boot 3.5.x
+* **Language Runtime**: Java 17
+* **Distributed Routing**: Spring Cloud Gateway
+* **Inter-Service Communication**: Spring Cloud OpenFeign
+* **Object Mapping & Data Access**: Spring Data JPA & Hibernate
+* **Database Engine**: PostgreSQL 15 (Alpine)
+* **Metrics & Monitoring**: Micrometer, Prometheus, Grafana
+* **Container Orchestration**: Docker & Docker Compose
+* **Build System**: Maven (Multi-Module Project Model)
 
-### Day 4: Stage 2 - Notification Service Implementation & Debugging (Completed)
-**Goal**: Complete the concrete backend logic for the `notification-service`, resolve bean instantiation crashes, and verify clean startup.
+---
 
-**What was done**:
-1. **Concrete Service Implementation**: Wrote the complete `NotificationServiceImpl` implementing CRUD methods (`saveNotification`, `getAllNotifications`, `getNotificationById`, `updateNotification`, `deleteNotification`) and connecting to `NotificationRepository`.
-2. **Spring Context Resolution**: Annotated the service implementation with `@Service` and verified that it implements `NotificationService` to resolve the autowiring failure in `NotificationController`.
-3. **Application Boot Verification**: Verified that the service starts Tomcat successfully on port `8083` and logs a successful JPA Repository interface detection.
-4. **Database Mapping**: Verified Hibernate automatically sets up the `notifications` schema inside PostgreSQL.
+## 📂 Project Directory Structure
 
-**Why it was done**:
-* To resolve a critical context initialization failure (`UnsatisfiedDependencyException`) caused by missing stereotype annotations.
-* To prepare the system's audit logging infrastructure, enabling other services to submit notification alerts and healing state logs to PostgreSQL.
+| Directory / File | Description |
+| :--- | :--- |
+| **`gateway-service/`** | Spring Cloud Gateway proxy routing requests to subservices. |
+| **`transaction-service/`** | Mock business microservice with fault-injection controllers. |
+| **`healing-service/`** | Self-healing automation engine that determines repair workflows. |
+| **`notification-service/`** | Central audit and notification alerting registry service. |
+| **`k8s-observer-service/`** | Cluster state observer that dispatches detected pod crashes. |
+| **`docker/`** | Mount folders holding configurations (Prometheus targets, Grafana, etc.). |
+| **`scripts/`** | Directory housing operational helper batch commands. |
+| **`docker-compose.yml`** | Consolidated local database, observability, and microservice compose stack. |
+| **`pom.xml`** | Master Parent Maven configuration managing shared versions and compile configurations. |
 
-**What it does in the project**:
-* Exposes complete CRUD endpoints under `/api/v1/notifications` for tracking system warnings and emails.
-* Connects the notification persistence layer so that transaction errors can trigger logged warnings.
+---
 
-### Day 5: Stage 3 - Healing Service Foundation & Configuration (Completed)
-**Goal**: Build the core JPA mapping structures, DTOs, mappers, custom exceptions, and REST endpoints for the `healing-service`, and configure database integration.
+## 🚀 Setup & Execution Guide
 
-**What was done**:
-1. **Foundation Code Scaffolding**: Generated the complete class suite for `healing-service` comprising the `HealingOperation` entity (with `@PrePersist` hooks), `HealingAction` and `HealingStatus` enums, `HealingRepository`, mapper, validation DTOs, custom exception handler, and `HealingController`.
-2. **Build Configurations Fix**: Added the missing `spring-boot-starter-data-jpa` and `postgresql` driver dependencies to the module's `pom.xml`.
-3. **Application Properties Updates**: Wrote the PostgreSQL datasource connectivity settings (url, username, password, driver, and Hibernate properties) inside `application.yaml`.
-4. **Build & Test Validation**: Executed `mvn clean install` to run tests and verify context loading and JPA mapping compatibility.
+### Prerequisites
+* Java Development Kit (JDK) 17 or higher
+* Apache Maven (or use the pre-packaged POM compile wrapper)
+* Docker Desktop (with Compose capability activated)
 
-**Why it was done**:
-* To establish the core database tracking tables (`healing_operations`) where the platform will log every restart or resource scale action taken by the AI.
-* To resolve compiler dependency issues and connection pool driver failures that blocked module compilation and tests.
+### 1. Compile and Package the Project
+You can compile and clean all modules using the parent Maven descriptors or trigger the pre-packaged command script:
+```powershell
+# Run the build batch file
+.\scripts\build.bat
+```
+*(This triggers `mvn clean package -DskipTests` to compile and package all modules into jar archives inside their respective `target` folders).*
 
-**What it does in the project**:
-* Exposes REST CRUD endpoints under `/api/v1/healing` to query or log auto-remediations.
-* Maps database tables automatically in PostgreSQL via Hibernate's schema update.
+### 2. Launch Infrastructure and Microservices
+Start PostgreSQL, Prometheus, Grafana, and the 5 Spring Boot microservice containers:
+```powershell
+# Spin up the containers in the background
+.\scripts\docker-up.bat
+```
 
-### Day 6: Stage 3 & 4 - Distributed Event Orchestration (Completed)
-**Goal**: Integrate the observer service, configure OpenFeign client communication boundaries, and orchestrate the automated failure audit workflow.
+### 3. Verify Active Services
+Verify container status:
+```bash
+docker ps
+```
+The following local ports will be active on your host system:
+* **API Gateway**: [http://localhost:8080](http://localhost:8080)
+* **Transaction Service**: [http://localhost:8081](http://localhost:8081)
+* **Healing Service**: [http://localhost:8082](http://localhost:8082)
+* **Notification Service**: [http://localhost:8083](http://localhost:8083)
+* **Observer Service**: [http://localhost:8084](http://localhost:8084)
+* **Prometheus Dashboard**: [http://localhost:9090](http://localhost:9090)
+* **Grafana Dashboard**: [http://localhost:3000](http://localhost:3000) (User: `admin`, Pass: `admin`)
 
-**What was done**:
-1. **Observer Service Deployment**: Integrated the `k8s-observer-service` (listening on port `8084`) to monitor and report container failures.
-2. **Feign Client Integrations**: Configured type-safe declarative REST clients using OpenFeign:
-   * **Observer → Healing**: `k8s-observer-service` invokes the `healing-service` endpoint.
-   * **Healing → Notification**: `healing-service` invokes the `notification-service` endpoint to notify administrators.
-3. **Automated Event Flow Orchestration**: Enabled the core distributed system flow:
-   * Client triggers `POST /observer/pod-failure`.
-   * `k8s-observer-service` routes details to `healing-service`.
-   * `healing-service` creates a `HealingOperation` record (marked PENDING / SUCCESS) in PostgreSQL.
-   * `healing-service` invokes `notification-service` to log a notification status record in PostgreSQL.
-4. **Project Compilation**: Verified all 6 modules build and pass tests cleanly during the `mvn clean install` cycle.
+---
 
-**Why it was done**:
-* To transform individual services into a cohesive distributed platform, simulating how real-world monitoring observers dispatch incidents to AI diagnostics.
-* To achieve decoupled auditing where database logs, healing runs, and alerts are stored in their respective service schemas.
+## 🔍 Verifying the Self-Healing Event Flow
 
-**What it does in the project**:
-* Connects the API gateway router and all 4 backend microservices into a unified pipeline.
-* Handles asynchronous event processing where container crashes are logged, diagnosed, and reported automatically.
+To test the orchestration flow, trigger a mock pod failure on the Observer Service. This simulates an automated cluster agent finding an OOM crash.
+
+Execute a `POST` request to `/api/v1/observer/pod-failure` (mapped through the Gateway):
+
+```powershell
+# Trigger a pod failure via curl
+curl -X POST http://localhost:8080/api/v1/observer/pod-failure `
+  -H "Content-Type: application/json" `
+  -d '{"podName": "payment-api-7fbc9", "namespace": "production", "reason": "OOMKilled"}'
+```
+
+### What Happens in the Background:
+1. **Observer** receives the crash event and maps it to a `PodFailureRequestDTO`.
+2. **Observer** calls `HealingClient` (Feign client pointing to `healing-service`).
+3. **Healing Service** logs a `HealingOperation` record (e.g. `RESTART`) as `SUCCESS` inside the PostgreSQL `healing_operations` table.
+4. **Healing Service** dispatches a REST alert via `NotificationClient` (Feign client pointing to `notification-service`).
+5. **Notification Service** registers an administrator alert warning inside the PostgreSQL `notifications` table.
+
+### Check the PostgreSQL Database Logs:
+Connect to the database via Docker:
+```bash
+docker exec -it aiops-postgres psql -U aiops_user -d aiops_db
+```
+Query the healing and notification logs:
+```sql
+-- View generated healing audit entries
+SELECT id, pod_name, namespace, healing_action, healing_status, reason FROM healing_operations;
+
+-- View dispatched alerts
+SELECT id, recipient, subject, message FROM notifications;
+```
+
+---
+
+## 📈 Actuator & Observability Metrics
+
+All microservices are equipped with Micrometer, exposing Prometheus scraping data on `/actuator/prometheus`.
+
+### Verify Metrics Scraping
+Request metrics locally:
+```bash
+curl http://localhost:8081/actuator/prometheus
+```
+Verify Prometheus network target reachability:
+* Open [http://localhost:9090/targets](http://localhost:9090/targets) inside your browser. All internal microservice scrape targets should report as **UP**.
+
+---
+
+## 🖼️ Dashboard Showcase (Placeholders)
+*Here, add screenshots of the Grafana JVM Metrics dashboard and the console outputs from self-healing runs.*
+* **Grafana Dashboard Screen**: *(Placeholder for Grafana Dashboard JVM Heap/Thread stats)*
+* **PostgreSQL Tables Console**: *(Placeholder for SQL table query outputs showing healing operation runs)*
+
+---
+
+## 🔮 Future Architecture Improvements
+* **Real Kubernetes Integration**: Swap the mock observer with a real-time event watcher utilizing the `io.kubernetes:client-java` library and configure RBAC `ServiceAccount` credentials.
+* **LLM Diagnostics (Gemini API)**: Connect a `WebClient` call to Google Generative AI to feed pod crash log tails into Gemini, dynamically parsing root causes and selecting the best repair strategy (e.g., scale limit vs. pod restart).
+* **Fail-Safe Circuit Breaker**: Integrate Resilience4j around Feign client links to handle network delays gracefully.

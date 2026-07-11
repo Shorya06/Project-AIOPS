@@ -13,3 +13,8 @@ postgres_data/
 # OS specific files
 .DS_Store
 Thumbs.db
+
+# Logs & Environment Configuration
+logs/
+.env
+.env.*
