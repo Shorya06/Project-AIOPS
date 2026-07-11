@@ -1,5 +1,7 @@
 package com.aiops.healing.controller;
 
+import com.aiops.healing.context.FailureContext;
+import com.aiops.healing.dto.AIHealingDecision;
 import com.aiops.healing.dto.HealingRequestDTO;
 import com.aiops.healing.dto.HealingResponseDTO;
 import com.aiops.healing.dto.RestartPodRequestDTO;
@@ -101,6 +103,22 @@ public class HealingController {
         HealingOperation operation = healingService.performHealing(request);
 
         return HealingMapper.toResponseDTO(operation);
+    }
+
+    /**
+     * ==============================================================
+     * Analyze Failure (AI Business Endpoint - Development / Testing Endpoint Only)
+     * ==============================================================
+     *
+     * Analyzes the enriched Kubernetes failure context using Gemini 
+     * and returns the structured AI healing decision.
+     */
+    @PostMapping("/analyze")
+    @ResponseStatus(HttpStatus.OK)
+    public AIHealingDecision analyzeFailure(
+            @Valid @RequestBody FailureContext context) {
+
+        return healingService.analyzeFailure(context);
     }
 
     /**

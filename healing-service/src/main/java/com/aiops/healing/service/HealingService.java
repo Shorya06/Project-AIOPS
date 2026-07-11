@@ -1,5 +1,7 @@
 package com.aiops.healing.service;
 
+import com.aiops.healing.context.FailureContext;
+import com.aiops.healing.dto.AIHealingDecision;
 import com.aiops.healing.dto.RestartPodRequestDTO;
 import com.aiops.healing.entity.HealingOperation;
 import java.util.List;
@@ -28,4 +30,6 @@ public interface HealingService {
     void deleteOperation(Long id);
 
     HealingOperation performHealing(RestartPodRequestDTO request);
+
+    AIHealingDecision analyzeFailure(FailureContext context);
 }

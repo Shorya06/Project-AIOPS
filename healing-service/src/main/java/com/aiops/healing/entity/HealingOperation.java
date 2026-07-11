@@ -27,6 +27,15 @@ public class HealingOperation {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "execution_id", unique = true)
+    private String executionId;
+
+    @Column(name = "analysis_id")
+    private Long analysisId;
+
+    @Column(name = "correlation_id")
+    private String correlationId;
+
     @Column(name = "pod_name", nullable = false)
     private String podName;
 
@@ -49,6 +58,15 @@ public class HealingOperation {
 
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
+
+    @Column(name = "execution_duration_ms")
+    private Long executionDurationMs;
+
+    @Column(name = "validation_result", columnDefinition = "TEXT")
+    private String validationResult;
+
+    @Column(name = "failure_reason", columnDefinition = "TEXT")
+    private String failureReason;
 
     @PrePersist
     protected void onCreate() {

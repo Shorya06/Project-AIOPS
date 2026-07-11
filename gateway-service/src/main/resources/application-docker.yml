@@ -28,6 +28,11 @@ spring:
           predicates:
             - Path=/api/v1/observer/**
 
+        - id: observer-alerts-route
+          uri: http://k8s-observer-service:8084
+          predicates:
+            - Path=/api/v1/alerts/**
+
 management:
   endpoints:
     web:

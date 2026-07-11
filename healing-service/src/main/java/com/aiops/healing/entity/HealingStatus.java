@@ -13,5 +13,6 @@ package com.aiops.healing.entity;
 public enum HealingStatus {
     PENDING,
     SUCCESS,
-    FAILED
+    FAILED,
+    PARTIAL
 }
