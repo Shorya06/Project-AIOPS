@@ -62,7 +62,7 @@ public class Notification {
     /**
      * Main notification content.
      */
-    @Column(nullable = false)
+    @Column(nullable = false, columnDefinition = "TEXT")
     private String message;
 
     /**

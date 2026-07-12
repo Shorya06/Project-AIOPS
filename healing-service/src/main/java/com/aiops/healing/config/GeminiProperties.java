@@ -21,5 +21,5 @@ import org.springframework.stereotype.Component;
 @Data
 public class GeminiProperties {
     private String apiKey;
-    private String model = "gemini-2.5-flash";
+    private String model = "gemini-3.5-flash";
 }

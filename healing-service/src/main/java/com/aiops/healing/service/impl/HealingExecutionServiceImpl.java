@@ -10,8 +10,10 @@ import io.kubernetes.client.openapi.Configuration;
 import io.kubernetes.client.openapi.apis.AppsV1Api;
 import io.kubernetes.client.openapi.apis.CoreV1Api;
 import io.kubernetes.client.openapi.models.V1ContainerStatus;
+import io.kubernetes.client.openapi.models.V1Deployment;
 import io.kubernetes.client.openapi.models.V1Pod;
 import io.kubernetes.client.util.Config;
+import io.kubernetes.client.util.PatchUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -73,7 +75,18 @@ public class HealingExecutionServiceImpl implements HealingExecutionService {
                     log.info("Kubernetes Exec: Patching deployment {} replicas to {} in namespace {}.", 
                             deploymentName, targetReplicas, namespace);
                     String jsonPatch = "[{\"op\": \"replace\", \"path\": \"/spec/replicas\", \"value\": " + targetReplicas + "}]";
-                    appsV1Api.patchNamespacedDeployment(deploymentName, namespace, new V1Patch(jsonPatch)).execute();
+                    PatchUtils.patch(
+                        V1Deployment.class,
+                        () -> {
+                            try {
+                                return appsV1Api.patchNamespacedDeployment(deploymentName, namespace, new V1Patch(jsonPatch)).buildCall(null);
+                            } catch (Exception e) {
+                                throw new RuntimeException(e);
+                            }
+                        },
+                        V1Patch.PATCH_FORMAT_JSON_PATCH,
+                        appsV1Api.getApiClient()
+                    );
                     log.info("Scale patch successfully executed in Kubernetes.");
                     break;
 
@@ -81,8 +94,19 @@ public class HealingExecutionServiceImpl implements HealingExecutionService {
                     String memoryLimit = decision.getActionParameters().getMemoryLimit();
                     log.info("Kubernetes Exec: Patching memory resource limits to {} for deployment {} in namespace {}.", 
                             memoryLimit, deploymentName, namespace);
-                    String limitPatch = "[{\"op\": \"replace\", \"path\": \"/spec/template/spec/containers/0/resources/limits/memory\", \"value\": \"" + memoryLimit + "\"}]";
-                    appsV1Api.patchNamespacedDeployment(deploymentName, namespace, new V1Patch(limitPatch)).execute();
+                    String limitPatch = "[{\"op\": \"add\", \"path\": \"/spec/template/spec/containers/0/resources\", \"value\": {\"limits\": {\"memory\": \"" + memoryLimit + "\"}}}]";
+                    PatchUtils.patch(
+                        V1Deployment.class,
+                        () -> {
+                            try {
+                                return appsV1Api.patchNamespacedDeployment(deploymentName, namespace, new V1Patch(limitPatch)).buildCall(null);
+                            } catch (Exception e) {
+                                throw new RuntimeException(e);
+                            }
+                        },
+                        V1Patch.PATCH_FORMAT_JSON_PATCH,
+                        appsV1Api.getApiClient()
+                    );
                     log.info("Resource limits patch successfully applied to Kubernetes.");
                     break;
 

@@ -25,6 +25,11 @@ spec:
           env:
             - name: SPRING_PROFILES_ACTIVE
               value: "docker"
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: gemini-secret
+                  key: gemini-api-key
             - name: NOTIFICATION_SERVICE_URL
               value: "http://notification-service:8083"
             - name: POSTGRES_DB_NAME
