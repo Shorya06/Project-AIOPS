@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-providers
+  namespace: aiops
+data:
+  dashboard-provider.yaml: |
+    apiVersion: 1
+    providers:
+      - name: 'AIOps Dashboards'
+        orgId: 1
+        folder: 'AIOps'
+        type: file
+        disableDeletion: true
+        editable: false
+        options:
+          path: /etc/grafana/provisioning/dashboards/json

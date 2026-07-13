@@ -29,4 +29,6 @@ public class HealingResponseDTO {
     private String reason;
     private LocalDateTime startedAt;
     private LocalDateTime completedAt;
+    private String correlationId;
+    private String executionId;
 }

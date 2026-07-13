@@ -1,186 +1,143 @@
 # AI-Powered Self-Healing AIOps Platform
 
-This is a production-grade **5-microservice AIOps Platform** built as a final-year CSE capstone project. The platform implements a distributed self-healing loop that simulates container monitor warnings (e.g., CPU/Memory resource exhaustion, OOMKilled, CrashLoopBackOff) and automatically triggers self-healing runs, logs operations audits, and dispatches administrative alerts across the cluster.
+This is a production-grade **5-microservice AIOps Platform** built as a CSE capstone project. The platform implements a distributed, closed-loop self-healing process: it monitors Kubernetes cluster workloads (e.g. CPU/Memory exhaustion, `OOMKilled`, `CrashLoopBackOff`), parses crash logs using the **Gemini API**, patches container limits automatically using the **Kubernetes Java Client**, and audits operations in PostgreSQL.
 
 ---
 
 ## 🏗️ System Architecture
 
 ### Distributed Microservice Topology
-The platform consists of a centralized API gateway that routes traffic to internal microservices communicating via type-safe declarative REST clients (Spring Cloud OpenFeign):
+All client communications route through the API Gateway on port `8080`. Microservices communicate internally using type-safe declarative REST clients (**Spring Cloud OpenFeign**):
 
-```text
-                       API Gateway (Port 8080)
-                                │
-        ┌───────────────────────┼───────────────────────┐
-        ▼                       ▼                       ▼
- Transaction Service      Healing Service      Notification Service
-     (Port 8081)            (Port 8082)            (Port 8083)
-                                ▲
-                                │
-                         OpenFeign Call
-                                ▲
-                                │
-                         Observer Service
-                           (Port 8084)
-```
-
-### End-to-End Orchestrated Event Flow
-When a cluster monitoring agent (represented by the Observer Service) intercepts a container fault, it orchestrates a distributed cascade of self-healing and alert actions:
-
-```text
-[POST /api/v1/observer/pod-failure]
-                  │
-                  ▼
-         [Observer Service]
-                  │
-             (OpenFeign)
-                  ▼
-          [Healing Service] ───► [Save Healing Audit Record] ───► [PostgreSQL]
-                  │
-             (OpenFeign)
-                  ▼
-       [Notification Service] ──► [Save Alert Log Record] ───► [PostgreSQL]
+```mermaid
+graph TD
+    Client[React 19 SRE Dashboard] -->|Port 8080| Gateway[1. gateway-service]
+    
+    Gateway -->|Route /api/v1/transactions| TxService[2. transaction-service]
+    Gateway -->|Route /api/v1/healing/**| HealingService[3. healing-service]
+    Gateway -->|Route /api/v1/notifications| NotifService[4. notification-service]
+    Gateway -->|Route /api/v1/observer/**| ObserverService[5. k8s-observer-service]
+    Gateway -->|Route /api/v1/alerts/**| ObserverService
+    
+    K8sAPI[Kubernetes API Server] <-->|Watch Pod events / Scrape logs| ObserverService
+    HealingService -->|Query Gemini Studio| Gemini[Gemini API]
+    HealingService -->|Execute patches / Scale deployment| K8sAPI
+    
+    TxService <--> DB[(PostgreSQL)]
+    NotifService <--> DB
+    HealingService <--> DB
+    
+    Prometheus[Prometheus] -.->|Scrape metrics| Gateway
+    Grafana[Grafana] -.->|Graph JVM stats| Prometheus
 ```
 
 ---
 
 ## ⚡ Core Features
 
-1. **Declarative API Routing**: Centralizes all frontend API paths under Spring Cloud Gateway (`8080`), abstracting port mappings of downstream services.
-2. **Kubernetes Failure Observation**: Watcher mock controller (`k8s-observer-service`) capable of capturing pod failure descriptors (`podName`, `namespace`, `reason`) and initiating diagnosis.
-3. **Automated Auto-Healing Runs**: Service rules that receive failure logs and determine action workflows (e.g. `RESTART`, `SCALE`) based on log tails.
-4. **Multi-Service Persistence**: PostgreSQL storage auditing every healing operation state (`PENDING`, `SUCCESS`, `FAILED`) and administrative notification alerts independently.
-5. **Observability Instrumentation**: All services publish system-level metrics via Micrometer and Spring Boot Actuator, fully integrated with Prometheus and Grafana for JVM monitoring.
+1.  **AI Diagnosis Center**: Feeds crashing container logs and event logs into the Gemini API using prompt structures to diagnose root causes and suggest whitelisted solutions.
+2.  **Kubernetes Java Client Mutations**: Automatically restarts failing pods or patches resource limits in the cluster namespace, verified by liveness loops.
+3.  **Lens-like Workloads Dashboard**: Interactive tabbed view displaying live pods, deployments, services, and namespaces using active Kubernetes APIs.
+4.  **Prometheus & JVM Scrapers**: Exposes system-level metrics via Spring Boot Actuator, plotted on moving Recharts graphs.
+5.  **Audit Ledger & Alerts Feed**: Tracks alertmanager alarm caches, notification dispatches, and healing history joined on `correlationId` keys.
 
 ---
 
 ## 🛠️ Technology Stack
 
-* **Core Framework**: Spring Boot 3.5.x
-* **Language Runtime**: Java 17
-* **Distributed Routing**: Spring Cloud Gateway
-* **Inter-Service Communication**: Spring Cloud OpenFeign
-* **Object Mapping & Data Access**: Spring Data JPA & Hibernate
-* **Database Engine**: PostgreSQL 15 (Alpine)
-* **Metrics & Monitoring**: Micrometer, Prometheus, Grafana
-* **Container Orchestration**: Docker & Docker Compose
-* **Build System**: Maven (Multi-Module Project Model)
+### Backend Microservices
+*   **Java 17 & Spring Boot 3.x**
+*   **Spring Cloud Gateway** & **Spring Cloud OpenFeign**
+*   **Spring Data JPA** & **Hibernate**
+*   **Kubernetes Java SDK Client** (`io.kubernetes:client-java`)
+*   **PostgreSQL 15 (Alpine)**
+
+### Frontend Observability Dashboard
+*   **React 19** & **TypeScript**
+*   **Vite** & **TailwindCSS v3**
+*   **TanStack Query** (React Query v5) & **Axios**
+*   **Recharts** (Visual timeline metrics)
+*   **Lucide React** & **Framer Motion**
 
 ---
 
 ## 📂 Project Directory Structure
 
-| Directory / File | Description |
-| :--- | :--- |
-| **`gateway-service/`** | Spring Cloud Gateway proxy routing requests to subservices. |
-| **`transaction-service/`** | Mock business microservice with fault-injection controllers. |
-| **`healing-service/`** | Self-healing automation engine that determines repair workflows. |
-| **`notification-service/`** | Central audit and notification alerting registry service. |
-| **`k8s-observer-service/`** | Cluster state observer that dispatches detected pod crashes. |
-| **`docker/`** | Mount folders holding configurations (Prometheus targets, Grafana, etc.). |
-| **`scripts/`** | Directory housing operational helper batch commands. |
-| **`docker-compose.yml`** | Consolidated local database, observability, and microservice compose stack. |
-| **`pom.xml`** | Master Parent Maven configuration managing shared versions and compile configurations. |
+```text
+project-aiops/
+├── docker/                 # Scrape configs for Prometheus and Alertmanager
+├── docs/                   # Development journals and phase logs
+├── frontend/               # React Vite TS web application
+├── gateway-service/        # Spring Cloud Gateway routing proxies
+├── healing-service/        # Core AI healing and Gemini orchestrator
+├── k8s-observer-service/   # Kubernetes client log watchers
+├── notification-service/   # Notification audits logging
+├── transaction-service/    # Fault-injection target app (OOM leaks)
+├── k8s/                    # Deployments, Services, RBAC yaml templates
+├── scripts/                # Launch script helpers (batch files)
+└── pom.xml                 # Maven multi-module parent configurations
+```
 
 ---
 
 ## 🚀 Setup & Execution Guide
 
 ### Prerequisites
-* Java Development Kit (JDK) 17 or higher
-* Apache Maven (or use the pre-packaged POM compile wrapper)
-* Docker Desktop (with Compose capability activated)
+*   Java JDK 17+ & Maven
+*   Node.js v18+ & NPM
+*   Docker Desktop (with Compose capability active)
+*   Minikube or local Kubernetes cluster (for K8s testing)
 
-### 1. Compile and Package the Project
-You can compile and clean all modules using the parent Maven descriptors or trigger the pre-packaged command script:
+### 1. Compile & Build Locally
+Package the Spring Boot jar archives:
 ```powershell
-# Run the build batch file
-.\scripts\build.bat
+# Compile all modules via Maven
+mvn clean package -DskipTests
 ```
-*(This triggers `mvn clean package -DskipTests` to compile and package all modules into jar archives inside their respective `target` folders).*
-
-### 2. Launch Infrastructure and Microservices
-Start PostgreSQL, Prometheus, Grafana, and the 5 Spring Boot microservice containers:
+Build the React SPA bundle:
 ```powershell
-# Spin up the containers in the background
-.\scripts\docker-up.bat
+cd frontend
+npm install
+npm run build
 ```
 
-### 3. Verify Active Services
-Verify container status:
-```bash
-docker ps
-```
-The following local ports will be active on your host system:
-* **API Gateway**: [http://localhost:8080](http://localhost:8080)
-* **Transaction Service**: [http://localhost:8081](http://localhost:8081)
-* **Healing Service**: [http://localhost:8082](http://localhost:8082)
-* **Notification Service**: [http://localhost:8083](http://localhost:8083)
-* **Observer Service**: [http://localhost:8084](http://localhost:8084)
-* **Prometheus Dashboard**: [http://localhost:9090](http://localhost:9090)
-* **Grafana Dashboard**: [http://localhost:3000](http://localhost:3000) (User: `admin`, Pass: `admin`)
-
----
-
-## 🔍 Verifying the Self-Healing Event Flow
-
-To test the orchestration flow, trigger a mock pod failure on the Observer Service. This simulates an automated cluster agent finding an OOM crash.
-
-Execute a `POST` request to `/api/v1/observer/pod-failure` (mapped through the Gateway):
-
+### 2. Launch Local Dev Stack (Docker Compose)
+Launch PostgreSQL, Prometheus, and Grafana:
 ```powershell
-# Trigger a pod failure via curl
-curl -X POST http://localhost:8080/api/v1/observer/pod-failure `
-  -H "Content-Type: application/json" `
-  -d '{"podName": "payment-api-7fbc9", "namespace": "production", "reason": "OOMKilled"}'
+docker-compose up -d
 ```
+All microservices can be run locally on their standard ports (`8080`-`8084`) pointing to `localhost`.
 
-### What Happens in the Background:
-1. **Observer** receives the crash event and maps it to a `PodFailureRequestDTO`.
-2. **Observer** calls `HealingClient` (Feign client pointing to `healing-service`).
-3. **Healing Service** logs a `HealingOperation` record (e.g. `RESTART`) as `SUCCESS` inside the PostgreSQL `healing_operations` table.
-4. **Healing Service** dispatches a REST alert via `NotificationClient` (Feign client pointing to `notification-service`).
-5. **Notification Service** registers an administrator alert warning inside the PostgreSQL `notifications` table.
+### 3. Deploy to Kubernetes (Minikube)
+1.  Initialize the cluster namespace:
+    ```bash
+    kubectl apply -f k8s/namespace.yaml
+    ```
+2.  Create database secrets and LLM tokens:
+    ```bash
+    kubectl create secret generic postgres-secret --from-literal=database=aiops_db --from-literal=username=aiops_user --from-literal=password=aiops_pass -n aiops
+    kubectl create secret generic gemini-secret --from-literal=gemini-api-key=YOUR_GEMINI_KEY -n aiops
+    ```
+3.  Deploy workloads:
+    ```bash
+    kubectl apply -R -f k8s/
+    ```
 
-### Check the PostgreSQL Database Logs:
-Connect to the database via Docker:
+---
+
+## 🔍 Closed-Loop AI Self-Healing Flow Simulation
+
+Trigger a JVM Memory Leak on the transaction service to test the entire closed-loop pipeline:
+
 ```bash
-docker exec -it aiops-postgres psql -U aiops_user -d aiops_db
-```
-Query the healing and notification logs:
-```sql
--- View generated healing audit entries
-SELECT id, pod_name, namespace, healing_action, healing_status, reason FROM healing_operations;
-
--- View dispatched alerts
-SELECT id, recipient, subject, message FROM notifications;
+# 1. Trigger OOM leak via the Gateway proxy
+curl http://localhost:8080/api/v1/transactions/fault/oom
 ```
 
----
-
-## 📈 Actuator & Observability Metrics
-
-All microservices are equipped with Micrometer, exposing Prometheus scraping data on `/actuator/prometheus`.
-
-### Verify Metrics Scraping
-Request metrics locally:
-```bash
-curl http://localhost:8081/actuator/prometheus
-```
-Verify Prometheus network target reachability:
-* Open [http://localhost:9090/targets](http://localhost:9090/targets) inside your browser. All internal microservice scrape targets should report as **UP**.
-
----
-
-## 🖼️ Dashboard Showcase (Placeholders)
-*Here, add screenshots of the Grafana JVM Metrics dashboard and the console outputs from self-healing runs.*
-* **Grafana Dashboard Screen**: *(Placeholder for Grafana Dashboard JVM Heap/Thread stats)*
-* **PostgreSQL Tables Console**: *(Placeholder for SQL table query outputs showing healing operation runs)*
-
----
-
-## 🔮 Future Architecture Improvements
-* **Real Kubernetes Integration**: Swap the mock observer with a real-time event watcher utilizing the `io.kubernetes:client-java` library and configure RBAC `ServiceAccount` credentials.
-* **LLM Diagnostics (Gemini API)**: Connect a `WebClient` call to Google Generative AI to feed pod crash log tails into Gemini, dynamically parsing root causes and selecting the best repair strategy (e.g., scale limit vs. pod restart).
-* **Fail-Safe Circuit Breaker**: Integrate Resilience4j around Feign client links to handle network delays gracefully.
+### Flow Lifecycle
+1.  **Fault**: The Java heap exhausts, triggering an `OOMKilled` container termination event.
+2.  **Observer**: `k8s-observer-service` intercepts the pod crash state, fetches the last 50 lines of container logs, and constructs a Failure Context.
+3.  **AI Analysis**: The context is sent to the `healing-service`. Gemini analyzes the stacktrace (`java.lang.OutOfMemoryError`) and suggests an `INCREASE_MEMORY_LIMIT` mutation.
+4.  **Remediation**: The Kubernetes client patches the deployment limit (e.g. `256Mi` $\rightarrow$ `512Mi`).
+5.  **Cooldown check**: A background thread waits for 60 seconds (cooldown) and verifies if the pod restarted successfully.
+6.  **Audit**: The audit ledger logs the result, dispatching alert notifications to SRE timelines.

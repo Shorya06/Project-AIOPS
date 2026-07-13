@@ -19,4 +19,6 @@ public interface KubernetesContextService {
 
     FailureContext buildFailureContext(String podName, String namespace, String alertName, String severity, String correlationId);
 
+    java.util.Map<String, Object> getClusterTelemetry();
+
 }

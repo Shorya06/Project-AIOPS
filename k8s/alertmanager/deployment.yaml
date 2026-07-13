@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: alertmanager
-          image: prom/alertmanager:latest
+          image: prom/alertmanager:v0.27.0
           ports:
             - containerPort: 9093
               name: api

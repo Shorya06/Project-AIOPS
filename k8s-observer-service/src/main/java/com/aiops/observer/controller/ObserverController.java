@@ -28,9 +28,21 @@ import org.springframework.web.bind.annotation.*;
 public class ObserverController {
 
     private final ObserverService observerService;
+    private final com.aiops.observer.service.KubernetesContextService kubernetesContextService;
 
-    public ObserverController(ObserverService observerService) {
+    public ObserverController(
+            ObserverService observerService,
+            com.aiops.observer.service.KubernetesContextService kubernetesContextService) {
         this.observerService = observerService;
+        this.kubernetesContextService = kubernetesContextService;
+    }
+
+    /**
+     * Exposes read-only active Kubernetes cluster telemetry.
+     */
+    @GetMapping("/kubernetes")
+    public java.util.Map<String, Object> getClusterTelemetry() {
+        return kubernetesContextService.getClusterTelemetry();
     }
 
     /**

@@ -32,8 +32,15 @@ public class AlertController {
     private static final Logger log = LoggerFactory.getLogger(AlertController.class);
     private final AlertProcessingService alertProcessingService;
 
+    private static final java.util.List<com.aiops.observer.dto.AlertDTO> alertCache = new java.util.concurrent.CopyOnWriteArrayList<>();
+
     public AlertController(AlertProcessingService alertProcessingService) {
         this.alertProcessingService = alertProcessingService;
+    }
+
+    @GetMapping
+    public java.util.List<com.aiops.observer.dto.AlertDTO> getAlertCache() {
+        return alertCache;
     }
 
     @PostMapping
@@ -42,6 +49,15 @@ public class AlertController {
         String correlationId = UUID.randomUUID().toString();
         MDC.put("correlationId", correlationId);
         log.info("[CorrelationID: {}] Received Alertmanager webhook notification.", correlationId);
+        
+        // Cache alerts
+        if (request != null && request.getAlerts() != null) {
+            alertCache.addAll(request.getAlerts());
+            while (alertCache.size() > 50) {
+                alertCache.remove(0);
+            }
+        }
+
         try {
             alertProcessingService.processAlerts(request, correlationId);
         } finally {
