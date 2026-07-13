@@ -26,3 +26,8 @@ logs/
 .env
 .env.*
 .env.local
+
+# Vite cache
+.vite/
+**/dist/
+**/dist-*
