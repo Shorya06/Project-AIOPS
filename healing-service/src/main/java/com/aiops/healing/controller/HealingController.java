@@ -170,4 +170,50 @@ public class HealingController {
 
         healingService.deleteOperation(id);
     }
+
+    /**
+     * Fetch all AI analysis record audits.
+     */
+    @GetMapping("/analysis")
+    public List<com.aiops.healing.entity.AIAnalysisRecord> getAllAnalysisRecords() {
+        return healingService.getAllAnalysisRecords();
+    }
+
+    /**
+     * Returns aggregated analysis statistics computed from persisted DB records.
+     * Formula: AVG(executionDurationMs) = SUM(executionDurationMs) / COUNT(records)
+     */
+    @GetMapping("/analysis/stats")
+    public java.util.Map<String, Object> getAnalysisStats() {
+        List<com.aiops.healing.entity.AIAnalysisRecord> records = healingService.getAllAnalysisRecords();
+        java.util.Map<String, Object> stats = new java.util.HashMap<>();
+
+        if (records.isEmpty()) {
+            stats.put("averageAnalysisTimeMs", 0);
+            stats.put("totalAnalyses", 0);
+            stats.put("lastAnalysisTimestamp", null);
+            stats.put("activeModel", null);
+            return stats;
+        }
+
+        long totalDuration = 0;
+        int count = 0;
+        for (com.aiops.healing.entity.AIAnalysisRecord rec : records) {
+            if (rec.getExecutionDurationMs() != null) {
+                totalDuration += rec.getExecutionDurationMs();
+                count++;
+            }
+        }
+
+        double avgMs = count > 0 ? (double) totalDuration / count : 0;
+        stats.put("averageAnalysisTimeMs", Math.round(avgMs * 100.0) / 100.0);
+        stats.put("totalAnalyses", records.size());
+
+        // Latest record for model info and timestamp
+        com.aiops.healing.entity.AIAnalysisRecord latest = records.get(records.size() - 1);
+        stats.put("lastAnalysisTimestamp", latest.getTimestamp());
+        stats.put("activeModel", latest.getGeminiModel());
+
+        return stats;
+    }
 }

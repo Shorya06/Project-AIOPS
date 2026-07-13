@@ -10,8 +10,11 @@ import io.kubernetes.client.openapi.Configuration;
 import io.kubernetes.client.openapi.apis.AppsV1Api;
 import io.kubernetes.client.openapi.apis.CoreV1Api;
 import io.kubernetes.client.openapi.models.V1ContainerStatus;
+import io.kubernetes.client.openapi.models.V1Deployment;
 import io.kubernetes.client.openapi.models.V1Pod;
+import io.kubernetes.client.openapi.models.V1Scale;
 import io.kubernetes.client.util.Config;
+import io.kubernetes.client.util.PatchUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -28,6 +31,11 @@ import org.springframework.stereotype.Service;
  * Why it exists:
  * Wraps K8s API builder invocations with try-catch blocks to prevent cluster
  * connection errors from crashing the main transaction pipeline.
+ *
+ * Remediation Strategy:
+ * - RESTART_POD:           CoreV1Api.deleteNamespacedPod (triggers deployment controller restart)
+ * - SCALE_DEPLOYMENT:      Scale Subresource API (AppsV1Api.readNamespacedDeploymentScale + replaceNamespacedDeploymentScale)
+ * - INCREASE_MEMORY_LIMIT: Strategic Merge Patch (PATCH_FORMAT_STRATEGIC_MERGE_PATCH)
  */
 @Service
 public class HealingExecutionServiceImpl implements HealingExecutionService {
@@ -70,19 +78,17 @@ public class HealingExecutionServiceImpl implements HealingExecutionService {
 
                 case SCALE_DEPLOYMENT:
                     int targetReplicas = decision.getActionParameters().getReplicas();
-                    log.info("Kubernetes Exec: Patching deployment {} replicas to {} in namespace {}.", 
+                    log.info("Kubernetes Exec: Scaling deployment {} to {} replicas in namespace {} via Scale Subresource API.",
                             deploymentName, targetReplicas, namespace);
-                    String jsonPatch = "[{\"op\": \"replace\", \"path\": \"/spec/replicas\", \"value\": " + targetReplicas + "}]";
-                    appsV1Api.patchNamespacedDeployment(deploymentName, namespace, new V1Patch(jsonPatch)).execute();
-                    log.info("Scale patch successfully executed in Kubernetes.");
+                    scaleDeployment(deploymentName, namespace, targetReplicas);
+                    log.info("Scale operation successfully executed in Kubernetes.");
                     break;
 
                 case INCREASE_MEMORY_LIMIT:
                     String memoryLimit = decision.getActionParameters().getMemoryLimit();
-                    log.info("Kubernetes Exec: Patching memory resource limits to {} for deployment {} in namespace {}.", 
+                    log.info("Kubernetes Exec: Patching memory resource limits to {} for deployment {} in namespace {} via Strategic Merge Patch.",
                             memoryLimit, deploymentName, namespace);
-                    String limitPatch = "[{\"op\": \"replace\", \"path\": \"/spec/template/spec/containers/0/resources/limits/memory\", \"value\": \"" + memoryLimit + "\"}]";
-                    appsV1Api.patchNamespacedDeployment(deploymentName, namespace, new V1Patch(limitPatch)).execute();
+                    patchMemoryLimit(deploymentName, namespace, memoryLimit);
                     log.info("Resource limits patch successfully applied to Kubernetes.");
                     break;
 
@@ -95,6 +101,44 @@ public class HealingExecutionServiceImpl implements HealingExecutionService {
             log.error("Failed to execute Kubernetes remediation action {}: {}", action, e.getMessage());
             throw new RuntimeException("Remediation execution failed: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * Scales a deployment using the official Kubernetes Scale Subresource API.
+     * This is the preferred, Kubernetes-native approach for replica mutations.
+     *
+     * Flow:
+     * 1. Read current Scale subresource (preserves resourceVersion for optimistic locking)
+     * 2. Set target replicas
+     * 3. Replace Scale subresource
+     */
+    private void scaleDeployment(String deploymentName, String namespace, int targetReplicas) throws Exception {
+        V1Scale currentScale = appsV1Api.readNamespacedDeploymentScale(deploymentName, namespace).execute();
+        if (currentScale.getSpec() != null) {
+            currentScale.getSpec().setReplicas(targetReplicas);
+        }
+        appsV1Api.replaceNamespacedDeploymentScale(deploymentName, namespace, currentScale).execute();
+    }
+
+    /**
+     * Patches deployment memory limits using Strategic Merge Patch.
+     * Strategic Merge Patch is K8s-native and handles missing intermediate paths
+     * gracefully (unlike JSON Patch which fails with 422 if paths don't exist).
+     */
+    private void patchMemoryLimit(String deploymentName, String namespace, String memoryLimit) throws Exception {
+        String mergePatch = "{\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"name\":\"" + deploymentName + "\",\"resources\":{\"limits\":{\"memory\":\"" + memoryLimit + "\"}}}]}}}}";
+        PatchUtils.patch(
+            V1Deployment.class,
+            () -> {
+                try {
+                    return appsV1Api.patchNamespacedDeployment(deploymentName, namespace, new V1Patch(mergePatch)).buildCall(null);
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            },
+            V1Patch.PATCH_FORMAT_STRATEGIC_MERGE_PATCH,
+            appsV1Api.getApiClient()
+        );
     }
 
     @Override

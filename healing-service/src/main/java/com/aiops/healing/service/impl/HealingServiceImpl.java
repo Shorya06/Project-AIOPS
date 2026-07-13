@@ -354,4 +354,9 @@ public class HealingServiceImpl implements HealingService {
             }
         });
     }
+
+    @Override
+    public List<com.aiops.healing.entity.AIAnalysisRecord> getAllAnalysisRecords() {
+        return aiAnalysisRecordRepository.findAll();
+    }
 }

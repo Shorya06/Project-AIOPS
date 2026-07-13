@@ -239,4 +239,147 @@ public class KubernetesContextServiceImpl implements KubernetesContextService {
                 .last50LogLines(mockLogs)
                 .build();
     }
+
+    @Override
+    public java.util.Map<String, Object> getClusterTelemetry() {
+        java.util.Map<String, Object> telemetry = new java.util.HashMap<>();
+        if (coreV1Api == null) {
+            telemetry.put("status", "OFFLINE");
+            telemetry.put("namespaces", java.util.Collections.emptyList());
+            telemetry.put("pods", java.util.Collections.emptyList());
+            telemetry.put("deployments", java.util.Collections.emptyList());
+            telemetry.put("services", java.util.Collections.emptyList());
+            return telemetry;
+        }
+
+        try {
+            telemetry.put("status", "ONLINE");
+
+            // 1. Fetch Namespaces
+            List<String> nsList = new java.util.ArrayList<>();
+            try {
+                V1NamespaceList namespaces = coreV1Api.listNamespace().execute();
+                if (namespaces != null && namespaces.getItems() != null) {
+                    for (V1Namespace ns : namespaces.getItems()) {
+                        if (ns.getMetadata() != null) {
+                            nsList.add(ns.getMetadata().getName());
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Failed to list namespaces from cluster API (insufficient RBAC). Defaulting to ['aiops']. Error: {}", e.getMessage());
+                nsList.add("aiops");
+            }
+            telemetry.put("namespaces", nsList);
+
+            // 2. Fetch Pods in namespace "aiops"
+            List<java.util.Map<String, Object>> podList = new java.util.ArrayList<>();
+            try {
+                ApiClient apiClient = Configuration.getDefaultApiClient();
+                okhttp3.OkHttpClient httpClient = apiClient.getHttpClient();
+                String url = apiClient.getBasePath() + "/api/v1/namespaces/aiops/pods";
+                okhttp3.Request request = new okhttp3.Request.Builder()
+                        .url(url)
+                        .get()
+                        .build();
+                        
+                try (okhttp3.Response response = httpClient.newCall(request).execute()) {
+                    if (response.isSuccessful() && response.body() != null) {
+                        String bodyString = response.body().string();
+                        com.google.gson.JsonObject jsonObject = com.google.gson.JsonParser.parseString(bodyString).getAsJsonObject();
+                        com.google.gson.JsonArray items = jsonObject.getAsJsonArray("items");
+                        if (items != null) {
+                            for (com.google.gson.JsonElement itemEl : items) {
+                                com.google.gson.JsonObject item = itemEl.getAsJsonObject();
+                                com.google.gson.JsonObject metadata = item.getAsJsonObject("metadata");
+                                com.google.gson.JsonObject statusObj = item.getAsJsonObject("status");
+                                
+                                if (metadata != null) {
+                                    java.util.Map<String, Object> p = new java.util.HashMap<>();
+                                    p.put("name", metadata.has("name") ? metadata.get("name").getAsString() : "unknown");
+                                    p.put("namespace", metadata.has("namespace") ? metadata.get("namespace").getAsString() : "aiops");
+                                    
+                                    String phase = "Unknown";
+                                    int restarts = 0;
+                                    if (statusObj != null) {
+                                        phase = statusObj.has("phase") ? statusObj.get("phase").getAsString() : "Unknown";
+                                        com.google.gson.JsonArray containerStatuses = statusObj.getAsJsonArray("containerStatuses");
+                                        if (containerStatuses != null && containerStatuses.size() > 0) {
+                                            com.google.gson.JsonObject cStatus = containerStatuses.get(0).getAsJsonObject();
+                                            if (cStatus.has("restartCount")) {
+                                                restarts = cStatus.get("restartCount").getAsInt();
+                                            }
+                                        }
+                                    }
+                                    p.put("status", phase);
+                                    p.put("restartCount", restarts);
+                                    podList.add(p);
+                                }
+                            }
+                        }
+                    } else {
+                        log.error("Raw pod list response unsuccessful: code={}, message={}", response.code(), response.message());
+                    }
+                }
+            } catch (Exception e) {
+                log.error("Failed to list pods raw in namespace 'aiops': {}", e.getMessage());
+            }
+            telemetry.put("pods", podList);
+
+            // 3. Fetch Deployments in namespace "aiops"
+            io.kubernetes.client.openapi.apis.AppsV1Api appsV1Api = new io.kubernetes.client.openapi.apis.AppsV1Api();
+            List<java.util.Map<String, Object>> deployList = new java.util.ArrayList<>();
+            V1DeploymentList deploys = appsV1Api.listNamespacedDeployment("aiops").execute();
+            if (deploys != null && deploys.getItems() != null) {
+                for (V1Deployment deploy : deploys.getItems()) {
+                    if (deploy.getMetadata() != null) {
+                        java.util.Map<String, Object> d = new java.util.HashMap<>();
+                        d.put("name", deploy.getMetadata().getName());
+                        d.put("namespace", deploy.getMetadata().getNamespace());
+                        
+                        int replicas = 0;
+                        int readyReplicas = 0;
+                        if (deploy.getSpec() != null && deploy.getSpec().getReplicas() != null) {
+                            replicas = deploy.getSpec().getReplicas();
+                        }
+                        if (deploy.getStatus() != null && deploy.getStatus().getReadyReplicas() != null) {
+                            readyReplicas = deploy.getStatus().getReadyReplicas();
+                        }
+                        d.put("replicas", replicas);
+                        d.put("readyReplicas", readyReplicas);
+                        deployList.add(d);
+                    }
+                }
+            }
+            telemetry.put("deployments", deployList);
+
+            // 4. Fetch Services in namespace "aiops"
+            List<java.util.Map<String, Object>> serviceList = new java.util.ArrayList<>();
+            V1ServiceList svcs = coreV1Api.listNamespacedService("aiops").execute();
+            if (svcs != null && svcs.getItems() != null) {
+                for (V1Service svc : svcs.getItems()) {
+                    if (svc.getMetadata() != null) {
+                        java.util.Map<String, Object> s = new java.util.HashMap<>();
+                        s.put("name", svc.getMetadata().getName());
+                        s.put("namespace", svc.getMetadata().getNamespace());
+                        
+                        String type = "ClusterIP";
+                        if (svc.getSpec() != null) {
+                            type = svc.getSpec().getType() != null ? svc.getSpec().getType() : "ClusterIP";
+                        }
+                        s.put("type", type);
+                        serviceList.add(s);
+                    }
+                }
+            }
+            telemetry.put("services", serviceList);
+
+        } catch (Exception e) {
+            log.error("Error fetching cluster telemetry: {}", e.getMessage());
+            telemetry.put("status", "ERROR");
+            telemetry.put("error", e.getMessage());
+        }
+
+        return telemetry;
+    }
 }

@@ -1,186 +1,210 @@
-# AI-Powered Self-Healing AIOps Platform
+# AIOps: AI-Powered Closed-Loop Self-Healing Platform
 
-This is a production-grade **5-microservice AIOps Platform** built as a final-year CSE capstone project. The platform implements a distributed self-healing loop that simulates container monitor warnings (e.g., CPU/Memory resource exhaustion, OOMKilled, CrashLoopBackOff) and automatically triggers self-healing runs, logs operations audits, and dispatches administrative alerts across the cluster.
+A production-grade, distributed, **5-microservice AIOps Platform** built to implement automated closed-loop observability and remediation inside Kubernetes. The platform monitors workloads, parses crash dumps and logs using the **Google Gemini LLM**, patches container limits and replicas automatically using the **Kubernetes Java Client**, and audits operations in PostgreSQL.
 
 ---
 
-## 🏗️ System Architecture
+## 🏗️ Architecture Overview
 
-### Distributed Microservice Topology
-The platform consists of a centralized API gateway that routes traffic to internal microservices communicating via type-safe declarative REST clients (Spring Cloud OpenFeign):
+The system routes all external SRE requests through an API Gateway, communicates internally using declarative REST clients, persists state in PostgreSQL, and orchestrates remediation loops via the Kubernetes API server.
 
-```text
-                       API Gateway (Port 8080)
-                                │
-        ┌───────────────────────┼───────────────────────┐
-        ▼                       ▼                       ▼
- Transaction Service      Healing Service      Notification Service
-     (Port 8081)            (Port 8082)            (Port 8083)
-                                ▲
-                                │
-                         OpenFeign Call
-                                ▲
-                                │
-                         Observer Service
-                           (Port 8084)
-```
+```mermaid
+graph TD
+    %% Presentation & Routing
+    Frontend["React Frontend (Vite)"]
+    Gateway["API Gateway (gateway-service)"]
+    
+    %% Microservices
+    TxSvc["Transaction Service"]
+    HealingSvc["Healing Service"]
+    NotifySvc["Notification Service"]
+    ObserverSvc["K8s Observer Service"]
+    
+    %% Databases & Observability
+    Postgres[(PostgreSQL)]
+    Prom["Prometheus"]
+    Grafana["Grafana"]
+    Alertmanager["Alertmanager"]
+    
+    %% External Integration
+    Gemini["Gemini AI (Google LLM)"]
 
-### End-to-End Orchestrated Event Flow
-When a cluster monitoring agent (represented by the Observer Service) intercepts a container fault, it orchestrates a distributed cascade of self-healing and alert actions:
-
-```text
-[POST /api/v1/observer/pod-failure]
-                  │
-                  ▼
-         [Observer Service]
-                  │
-             (OpenFeign)
-                  ▼
-          [Healing Service] ───► [Save Healing Audit Record] ───► [PostgreSQL]
-                  │
-             (OpenFeign)
-                  ▼
-       [Notification Service] ──► [Save Alert Log Record] ───► [PostgreSQL]
+    %% Communications Flow
+    Frontend -->|HTTP / JSON| Gateway
+    Gateway -->|Route: /api/v1/transactions| TxSvc
+    Gateway -->|Route: /api/v1/healing| HealingSvc
+    Gateway -->|Route: /api/v1/notifications| NotifySvc
+    Gateway -->|Route: /api/v1/observer| ObserverSvc
+    Gateway -->|Route: /api/v1/alerts| ObserverSvc
+    
+    %% Persistence
+    HealingSvc -->|Read/Write Audits| Postgres
+    TxSvc -->|Read/Write Operations| Postgres
+    
+    %% Observability Scrapes
+    Prom -->|Scrape: /actuator/prometheus| Gateway
+    Prom -->|Scrape: /actuator/prometheus| TxSvc
+    Prom -->|Scrape: /actuator/prometheus| HealingSvc
+    Prom -->|Scrape: /actuator/prometheus| NotifySvc
+    Prom -->|Scrape: /actuator/prometheus| ObserverSvc
+    
+    %% Alerting Flow
+    Prom -->|Rule thresholds exceeded| Alertmanager
+    Alertmanager -->|Post Webhook alert| ObserverSvc
+    
+    %% Healing Loop
+    ObserverSvc -->|Trigger Analysis request| HealingSvc
+    HealingSvc -->|Analyze FailureContext| Gemini
+    Gemini -->|Return structured diagnosis| HealingSvc
+    HealingSvc -->|Strategic Merge Patch / Scale subresource| HealingSvc
+    HealingSvc -->|Dispatch healing notification| NotifySvc
+    
+    %% Visualizations
+    Grafana -->|Query metrics| Prom
 ```
 
 ---
 
 ## ⚡ Core Features
 
-1. **Declarative API Routing**: Centralizes all frontend API paths under Spring Cloud Gateway (`8080`), abstracting port mappings of downstream services.
-2. **Kubernetes Failure Observation**: Watcher mock controller (`k8s-observer-service`) capable of capturing pod failure descriptors (`podName`, `namespace`, `reason`) and initiating diagnosis.
-3. **Automated Auto-Healing Runs**: Service rules that receive failure logs and determine action workflows (e.g. `RESTART`, `SCALE`) based on log tails.
-4. **Multi-Service Persistence**: PostgreSQL storage auditing every healing operation state (`PENDING`, `SUCCESS`, `FAILED`) and administrative notification alerts independently.
-5. **Observability Instrumentation**: All services publish system-level metrics via Micrometer and Spring Boot Actuator, fully integrated with Prometheus and Grafana for JVM monitoring.
+1.  **AI Diagnosis Center**: Gathers container stdout logs and node events during failures. Uses the Google Gemini API to analyze the dump and recommend a whitelisted mutation action.
+2.  **Kubernetes Java Client Mutations**: Scales deployments using the native Scale Subresource API and overrides resource constraints using Strategic Merge Patching.
+3.  **Lens-like SRE Workloads Dashboard**: Multi-namespace search, status chips, pod restart counters, and ready container counts queried from the live cluster.
+4.  **Prometheus & JVM Scrapers**: Pulls CPU/Memory utilization, JVM threads, GC pause times, and HTTP status codes, mapped on a real-time rolling timeline.
+5.  **Interactive Timelines & drawers**: Chronological stepper tracers for healing operations showing duration, whitelists, and logs; sliding drawers for SRE audit log correlation traces.
 
 ---
 
 ## 🛠️ Technology Stack
 
-* **Core Framework**: Spring Boot 3.5.x
-* **Language Runtime**: Java 17
-* **Distributed Routing**: Spring Cloud Gateway
-* **Inter-Service Communication**: Spring Cloud OpenFeign
-* **Object Mapping & Data Access**: Spring Data JPA & Hibernate
-* **Database Engine**: PostgreSQL 15 (Alpine)
-* **Metrics & Monitoring**: Micrometer, Prometheus, Grafana
-* **Container Orchestration**: Docker & Docker Compose
-* **Build System**: Maven (Multi-Module Project Model)
+### Backend Services
+- **Java 17 / Spring Boot 3.x**
+- **Spring Cloud Gateway** (Reverse proxy & load balancing)
+- **Spring Cloud OpenFeign** (Declarative REST client calls)
+- **Spring Data JPA / Hibernate**
+- **Kubernetes Java SDK Client** (`io.kubernetes:client-java`)
+- **PostgreSQL 15 (Alpine)**
+
+### Observability & Alerting
+- **Prometheus v2.51.1** (Telemetry metrics database)
+- **Grafana 10.4.2** (Automated provisioning & dashboards)
+- **Alertmanager v0.27.0** (Webhook alerting aggregator)
+
+### Frontend Console
+- **React 19 & TypeScript**
+- **Vite & TailwindCSS v3**
+- **TanStack Query (React Query v5) & Axios**
+- **Recharts** (Visual performance timeline)
+- **Sonner Toast System** (Real-time SRE status broadcasts)
 
 ---
 
-## 📂 Project Directory Structure
+## 📁 Repository Structure
 
-| Directory / File | Description |
-| :--- | :--- |
-| **`gateway-service/`** | Spring Cloud Gateway proxy routing requests to subservices. |
-| **`transaction-service/`** | Mock business microservice with fault-injection controllers. |
-| **`healing-service/`** | Self-healing automation engine that determines repair workflows. |
-| **`notification-service/`** | Central audit and notification alerting registry service. |
-| **`k8s-observer-service/`** | Cluster state observer that dispatches detected pod crashes. |
-| **`docker/`** | Mount folders holding configurations (Prometheus targets, Grafana, etc.). |
-| **`scripts/`** | Directory housing operational helper batch commands. |
-| **`docker-compose.yml`** | Consolidated local database, observability, and microservice compose stack. |
-| **`pom.xml`** | Master Parent Maven configuration managing shared versions and compile configurations. |
+```text
+project-aiops/
+├── docker/                 # Scrape configs for Prometheus and Alertmanager
+├── docs/                   # Platform architecture, deployment, and troubleshooting guides
+├── frontend/               # React Vite TS web application
+├── gateway-service/        # Spring Cloud Gateway routing proxies
+├── healing-service/        # Core AI healing and Gemini orchestrator
+├── k8s-observer-service/   # Kubernetes client log watchers & RBAC telemetry
+├── notification-service/   # Notification logs registry
+├── transaction-service/    # Fault-injection target app (OOM leaks)
+├── k8s/                    # Deployments, Services, RBAC yaml templates
+│   ├── alertmanager/
+│   ├── gateway/
+│   ├── grafana/            # Automated datasource & dashboard manifests
+│   ├── healing/
+│   ├── observer/
+│   ├── postgres/
+│   ├── prometheus/
+│   └── transaction/
+└── pom.xml                 # Maven multi-module parent configurations
+```
 
 ---
 
 ## 🚀 Setup & Execution Guide
 
-### Prerequisites
-* Java Development Kit (JDK) 17 or higher
-* Apache Maven (or use the pre-packaged POM compile wrapper)
-* Docker Desktop (with Compose capability activated)
+### Local Development Setup
 
-### 1. Compile and Package the Project
-You can compile and clean all modules using the parent Maven descriptors or trigger the pre-packaged command script:
-```powershell
-# Run the build batch file
-.\scripts\build.bat
-```
-*(This triggers `mvn clean package -DskipTests` to compile and package all modules into jar archives inside their respective `target` folders).*
+1.  **Compile JAR archives**:
+    ```powershell
+    mvn clean package -DskipTests
+    ```
+2.  **Start Database & Observability Stack**:
+    ```powershell
+    docker-compose up -d
+    ```
+3.  **Run Microservices**:
+    Run each application main class pointing to local profiles.
+4.  **Run React App**:
+    ```powershell
+    cd frontend
+    npm install
+    npm run dev
+    ```
 
-### 2. Launch Infrastructure and Microservices
-Start PostgreSQL, Prometheus, Grafana, and the 5 Spring Boot microservice containers:
-```powershell
-# Spin up the containers in the background
-.\scripts\docker-up.bat
-```
+### Kubernetes Deployment (Minikube)
 
-### 3. Verify Active Services
-Verify container status:
-```bash
-docker ps
-```
-The following local ports will be active on your host system:
-* **API Gateway**: [http://localhost:8080](http://localhost:8080)
-* **Transaction Service**: [http://localhost:8081](http://localhost:8081)
-* **Healing Service**: [http://localhost:8082](http://localhost:8082)
-* **Notification Service**: [http://localhost:8083](http://localhost:8083)
-* **Observer Service**: [http://localhost:8084](http://localhost:8084)
-* **Prometheus Dashboard**: [http://localhost:9090](http://localhost:9090)
-* **Grafana Dashboard**: [http://localhost:3000](http://localhost:3000) (User: `admin`, Pass: `admin`)
-
----
-
-## 🔍 Verifying the Self-Healing Event Flow
-
-To test the orchestration flow, trigger a mock pod failure on the Observer Service. This simulates an automated cluster agent finding an OOM crash.
-
-Execute a `POST` request to `/api/v1/observer/pod-failure` (mapped through the Gateway):
-
-```powershell
-# Trigger a pod failure via curl
-curl -X POST http://localhost:8080/api/v1/observer/pod-failure `
-  -H "Content-Type: application/json" `
-  -d '{"podName": "payment-api-7fbc9", "namespace": "production", "reason": "OOMKilled"}'
-```
-
-### What Happens in the Background:
-1. **Observer** receives the crash event and maps it to a `PodFailureRequestDTO`.
-2. **Observer** calls `HealingClient` (Feign client pointing to `healing-service`).
-3. **Healing Service** logs a `HealingOperation` record (e.g. `RESTART`) as `SUCCESS` inside the PostgreSQL `healing_operations` table.
-4. **Healing Service** dispatches a REST alert via `NotificationClient` (Feign client pointing to `notification-service`).
-5. **Notification Service** registers an administrator alert warning inside the PostgreSQL `notifications` table.
-
-### Check the PostgreSQL Database Logs:
-Connect to the database via Docker:
-```bash
-docker exec -it aiops-postgres psql -U aiops_user -d aiops_db
-```
-Query the healing and notification logs:
-```sql
--- View generated healing audit entries
-SELECT id, pod_name, namespace, healing_action, healing_status, reason FROM healing_operations;
-
--- View dispatched alerts
-SELECT id, recipient, subject, message FROM notifications;
-```
+1.  **Point Shell to Minikube Docker Registry**:
+    ```powershell
+    minikube docker-env | Invoke-Expression
+    ```
+2.  **Build Microservices Images**:
+    ```powershell
+    docker build -t projectaiops-gateway-service:latest ./gateway-service
+    docker build -t projectaiops-transaction-service:latest ./transaction-service
+    docker build -t projectaiops-notification-service:latest ./notification-service
+    docker build -t projectaiops-healing-service:latest ./healing-service
+    docker build -t projectaiops-k8s-observer-service:latest ./k8s-observer-service
+    ```
+3.  **Apply secrets**:
+    ```powershell
+    kubectl apply -f k8s/namespace.yaml
+    kubectl create secret generic postgres-secret --from-literal=database=aiops_db --from-literal=username=aiops_user --from-literal=password=aiops_pass -n aiops
+    kubectl create secret generic gemini-secret --from-literal=gemini-api-key=YOUR_GEMINI_KEY -n aiops
+    ```
+4.  **Apply Workloads**:
+    ```powershell
+    kubectl apply -R -f k8s/
+    ```
+5.  **Start Port Forwarding**:
+    ```powershell
+    kubectl port-forward svc/gateway-service 8080:8080 -n aiops
+    kubectl port-forward svc/grafana 3000:3000 -n aiops
+    ```
 
 ---
 
-## 📈 Actuator & Observability Metrics
+## ⚙️ Environment Variables
 
-All microservices are equipped with Micrometer, exposing Prometheus scraping data on `/actuator/prometheus`.
-
-### Verify Metrics Scraping
-Request metrics locally:
-```bash
-curl http://localhost:8081/actuator/prometheus
-```
-Verify Prometheus network target reachability:
-* Open [http://localhost:9090/targets](http://localhost:9090/targets) inside your browser. All internal microservice scrape targets should report as **UP**.
+- `GEMINI_API_KEY`: Required in `healing-service` to connect with Google LLM Studio.
+- `SPRING_PROFILES_ACTIVE`: Set to `docker` inside Kubernetes to enable service name discovery.
+- `VITE_API_BASE_URL`: Loaded in SRE Frontend, points to Gateway endpoint (`http://localhost:8080`).
 
 ---
 
-## 🖼️ Dashboard Showcase (Placeholders)
-*Here, add screenshots of the Grafana JVM Metrics dashboard and the console outputs from self-healing runs.*
-* **Grafana Dashboard Screen**: *(Placeholder for Grafana Dashboard JVM Heap/Thread stats)*
-* **PostgreSQL Tables Console**: *(Placeholder for SQL table query outputs showing healing operation runs)*
+## 📡 API Route Mappings
+
+| HTTP Method | Route | Target Service | Description |
+| :--- | :--- | :--- | :--- |
+| **GET** | `/api/v1/transactions` | `transaction-service` | Fetch transactions history |
+| **GET** | `/api/v1/transactions/fault/oom` | `transaction-service` | Trigger out-of-memory heap leak |
+| **GET** | `/api/v1/healing` | `healing-service` | Fetch self-healing audit logs |
+| **GET** | `/api/v1/healing/analysis/stats` | `healing-service` | Database-computed AI latencies |
+| **GET** | `/api/v1/observer/kubernetes` | `k8s-observer-service` | Retrieve active pods and workloads |
+| **POST** | `/api/v1/alerts` | `k8s-observer-service` | Webhook receiver for Alertmanager |
 
 ---
 
-## 🔮 Future Architecture Improvements
-* **Real Kubernetes Integration**: Swap the mock observer with a real-time event watcher utilizing the `io.kubernetes:client-java` library and configure RBAC `ServiceAccount` credentials.
-* **LLM Diagnostics (Gemini API)**: Connect a `WebClient` call to Google Generative AI to feed pod crash log tails into Gemini, dynamically parsing root causes and selecting the best repair strategy (e.g., scale limit vs. pod restart).
-* **Fail-Safe Circuit Breaker**: Integrate Resilience4j around Feign client links to handle network delays gracefully.
+## 📸 Screenshots
+
+*(Place dashboard, Grafana charts, and interactive drawers screenshots here)*
+
+---
+
+## 🛡️ License
+
+This project is released under the **MIT License**.

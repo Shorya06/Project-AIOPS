@@ -43,6 +43,8 @@ public class HealingMapper {
                 .reason(entity.getReason())
                 .startedAt(entity.getStartedAt())
                 .completedAt(entity.getCompletedAt())
+                .correlationId(entity.getCorrelationId())
+                .executionId(entity.getExecutionId())
                 .build();
     }
 }

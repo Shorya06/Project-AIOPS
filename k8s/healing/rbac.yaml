@@ -1,0 +1,26 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: healing-service-role
+  namespace: aiops
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "events", "services"]
+    verbs: ["get", "list", "watch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: healing-service-rolebinding
+  namespace: aiops
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: aiops
+roleRef:
+  kind: Role
+  name: healing-service-role
+  apiGroup: rbac.authorization.k8s.io

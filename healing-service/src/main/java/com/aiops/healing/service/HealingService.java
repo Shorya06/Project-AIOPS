@@ -32,4 +32,6 @@ public interface HealingService {
     HealingOperation performHealing(RestartPodRequestDTO request);
 
     AIHealingDecision analyzeFailure(FailureContext context);
+
+    List<com.aiops.healing.entity.AIAnalysisRecord> getAllAnalysisRecords();
 }

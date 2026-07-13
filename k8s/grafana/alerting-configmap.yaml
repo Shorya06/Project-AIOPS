@@ -1,0 +1,116 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-alerts
+  namespace: aiops
+data:
+  alerts.yaml: |
+    apiVersion: 1
+    groups:
+      - orgId: 1
+        name: 'AIOps Alert Rules'
+        folder: 'Alerts'
+        interval: 60s
+        rules:
+          - uid: gateway_down
+            title: 'Gateway Down'
+            condition: A
+            data:
+              - refId: A
+                relativeTimeRange:
+                  from: 300
+                  to: 0
+                datasourceUid: prometheus-ds
+                model:
+                  expr: up{job="gateway-service"} == 0
+                  intervalMs: 15000
+                  maxDataPoints: 43200
+                  refId: A
+            noDataState: Alerting
+            execErrState: Alerting
+            for: 1m
+          - uid: cpu_util_90
+            title: 'CPU Usage > 90%'
+            condition: A
+            data:
+              - refId: A
+                relativeTimeRange:
+                  from: 300
+                  to: 0
+                datasourceUid: prometheus-ds
+                model:
+                  expr: system_cpu_usage{job="gateway-service"} * 100 > 90
+                  intervalMs: 15000
+                  maxDataPoints: 43200
+                  refId: A
+            noDataState: OK
+            execErrState: Alerting
+            for: 2m
+          - uid: mem_util_85
+            title: 'Memory Usage > 85%'
+            condition: A
+            data:
+              - refId: A
+                relativeTimeRange:
+                  from: 300
+                  to: 0
+                datasourceUid: prometheus-ds
+                model:
+                  expr: (jvm_memory_used_bytes{job="gateway-service",area="heap"} / jvm_memory_max_bytes{job="gateway-service",area="heap"}) * 100 > 85
+                  intervalMs: 15000
+                  maxDataPoints: 43200
+                  refId: A
+            noDataState: OK
+            execErrState: Alerting
+            for: 2m
+          - uid: http_5xx_spikes
+            title: '5xx spikes'
+            condition: A
+            data:
+              - refId: A
+                relativeTimeRange:
+                  from: 300
+                  to: 0
+                datasourceUid: prometheus-ds
+                model:
+                  expr: sum(rate(http_server_requests_seconds_count{status=~"5.*"}[5m])) > 1
+                  intervalMs: 15000
+                  maxDataPoints: 43200
+                  refId: A
+            noDataState: OK
+            execErrState: Alerting
+            for: 1m
+          - uid: healing_failures
+            title: 'Healing failures'
+            condition: A
+            data:
+              - refId: A
+                relativeTimeRange:
+                  from: 300
+                  to: 0
+                datasourceUid: prometheus-ds
+                model:
+                  expr: increase(ai_healing_failed_total[5m]) > 0
+                  intervalMs: 15000
+                  maxDataPoints: 43200
+                  refId: A
+            noDataState: OK
+            execErrState: Alerting
+            for: 1m
+          - uid: prometheus_unreachable
+            title: 'Prometheus unreachable'
+            condition: A
+            data:
+              - refId: A
+                relativeTimeRange:
+                  from: 300
+                  to: 0
+                datasourceUid: prometheus-ds
+                model:
+                  expr: up{job="prometheus"} == 0
+                  intervalMs: 15000
+                  maxDataPoints: 43200
+                  refId: A
+            noDataState: Alerting
+            execErrState: Alerting
+            for: 1m
