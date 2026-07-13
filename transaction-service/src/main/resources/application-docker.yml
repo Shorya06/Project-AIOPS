@@ -6,9 +6,9 @@ spring:
     name: transaction-service
 
   datasource:
-    url: jdbc:postgresql://postgres:5432/aiops_db
-    username: aiops_user
-    password: aiops_password
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
     driver-class-name: org.postgresql.Driver
 
   jpa:
