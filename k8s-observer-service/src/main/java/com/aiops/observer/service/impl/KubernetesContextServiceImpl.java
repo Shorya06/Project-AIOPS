@@ -257,39 +257,72 @@ public class KubernetesContextServiceImpl implements KubernetesContextService {
 
             // 1. Fetch Namespaces
             List<String> nsList = new java.util.ArrayList<>();
-            V1NamespaceList namespaces = coreV1Api.listNamespace().execute();
-            if (namespaces != null && namespaces.getItems() != null) {
-                for (V1Namespace ns : namespaces.getItems()) {
-                    if (ns.getMetadata() != null) {
-                        nsList.add(ns.getMetadata().getName());
+            try {
+                V1NamespaceList namespaces = coreV1Api.listNamespace().execute();
+                if (namespaces != null && namespaces.getItems() != null) {
+                    for (V1Namespace ns : namespaces.getItems()) {
+                        if (ns.getMetadata() != null) {
+                            nsList.add(ns.getMetadata().getName());
+                        }
                     }
                 }
+            } catch (Exception e) {
+                log.warn("Failed to list namespaces from cluster API (insufficient RBAC). Defaulting to ['aiops']. Error: {}", e.getMessage());
+                nsList.add("aiops");
             }
             telemetry.put("namespaces", nsList);
 
             // 2. Fetch Pods in namespace "aiops"
             List<java.util.Map<String, Object>> podList = new java.util.ArrayList<>();
-            V1PodList pods = coreV1Api.listNamespacedPod("aiops").execute();
-            if (pods != null && pods.getItems() != null) {
-                for (V1Pod pod : pods.getItems()) {
-                    if (pod.getMetadata() != null) {
-                        java.util.Map<String, Object> p = new java.util.HashMap<>();
-                        p.put("name", pod.getMetadata().getName());
-                        p.put("namespace", pod.getMetadata().getNamespace());
+            try {
+                ApiClient apiClient = Configuration.getDefaultApiClient();
+                okhttp3.OkHttpClient httpClient = apiClient.getHttpClient();
+                String url = apiClient.getBasePath() + "/api/v1/namespaces/aiops/pods";
+                okhttp3.Request request = new okhttp3.Request.Builder()
+                        .url(url)
+                        .get()
+                        .build();
                         
-                        String status = "Unknown";
-                        int restarts = 0;
-                        if (pod.getStatus() != null) {
-                            status = pod.getStatus().getPhase() != null ? pod.getStatus().getPhase() : "Unknown";
-                            if (pod.getStatus().getContainerStatuses() != null && !pod.getStatus().getContainerStatuses().isEmpty()) {
-                                restarts = pod.getStatus().getContainerStatuses().get(0).getRestartCount();
+                try (okhttp3.Response response = httpClient.newCall(request).execute()) {
+                    if (response.isSuccessful() && response.body() != null) {
+                        String bodyString = response.body().string();
+                        com.google.gson.JsonObject jsonObject = com.google.gson.JsonParser.parseString(bodyString).getAsJsonObject();
+                        com.google.gson.JsonArray items = jsonObject.getAsJsonArray("items");
+                        if (items != null) {
+                            for (com.google.gson.JsonElement itemEl : items) {
+                                com.google.gson.JsonObject item = itemEl.getAsJsonObject();
+                                com.google.gson.JsonObject metadata = item.getAsJsonObject("metadata");
+                                com.google.gson.JsonObject statusObj = item.getAsJsonObject("status");
+                                
+                                if (metadata != null) {
+                                    java.util.Map<String, Object> p = new java.util.HashMap<>();
+                                    p.put("name", metadata.has("name") ? metadata.get("name").getAsString() : "unknown");
+                                    p.put("namespace", metadata.has("namespace") ? metadata.get("namespace").getAsString() : "aiops");
+                                    
+                                    String phase = "Unknown";
+                                    int restarts = 0;
+                                    if (statusObj != null) {
+                                        phase = statusObj.has("phase") ? statusObj.get("phase").getAsString() : "Unknown";
+                                        com.google.gson.JsonArray containerStatuses = statusObj.getAsJsonArray("containerStatuses");
+                                        if (containerStatuses != null && containerStatuses.size() > 0) {
+                                            com.google.gson.JsonObject cStatus = containerStatuses.get(0).getAsJsonObject();
+                                            if (cStatus.has("restartCount")) {
+                                                restarts = cStatus.get("restartCount").getAsInt();
+                                            }
+                                        }
+                                    }
+                                    p.put("status", phase);
+                                    p.put("restartCount", restarts);
+                                    podList.add(p);
+                                }
                             }
                         }
-                        p.put("status", status);
-                        p.put("restartCount", restarts);
-                        podList.add(p);
+                    } else {
+                        log.error("Raw pod list response unsuccessful: code={}, message={}", response.code(), response.message());
                     }
                 }
+            } catch (Exception e) {
+                log.error("Failed to list pods raw in namespace 'aiops': {}", e.getMessage());
             }
             telemetry.put("pods", podList);
 

@@ -1,12 +1,18 @@
-# Target directory containing compiled files
+# Compiled Java classes and packaging
 **/target/
+build/
+dist/
+.dist/
+
+# Dependencies
+node_modules/
 
 # IDE configurations
 .idea/
 *.iml
 .vscode/
 
-# Local database data (Docker volumes / temporary files)
+# Local database data
 pg_data/
 postgres_data/
 
@@ -16,5 +22,7 @@ Thumbs.db
 
 # Logs & Environment Configuration
 logs/
+*.log
 .env
 .env.*
+.env.local
